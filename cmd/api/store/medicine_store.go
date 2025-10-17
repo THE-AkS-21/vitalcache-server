@@ -1,6 +1,8 @@
 package store
 
 import (
+	"encoding/json"
+
 	"github.com/THE-AkS-21/vitalcache-server/cmd/api/models"
 	supa "github.com/supabase-community/supabase-go"
 )
@@ -13,12 +15,17 @@ func NewMedicineStore(client *supa.Client) *MedicineStore {
 	return &MedicineStore{client: client}
 }
 
-// New Function: Get all medicines for dropdowns
+// GetAll returns all medicines
 func (s *MedicineStore) GetAll() ([]models.Medicine, error) {
-	var result []models.Medicine
-	err := s.client.From("medicines").Select("*").Execute(&result)
+	data, _, err := s.client.From("medicines").Select("*", "", true).Execute()
 	if err != nil {
 		return nil, err
 	}
+
+	var result []models.Medicine
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+
 	return result, nil
 }
