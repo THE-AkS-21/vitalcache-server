@@ -41,22 +41,16 @@ func (s *DeveloperStore) Create(dev models.Developer) (models.Developer, error) 
 
 // GetByUserID retrieves a developer profile by its associated user_id
 func (s *DeveloperStore) GetByUserID(userID uint) (*models.Developer, error) {
-	data, _, err := s.client.
-		From("developers").
-		Select("*", "", true).
-		Eq("user_id", fmt.Sprintf("%d", userID)).
-		Execute()
+	data, _, err := s.client.From("developers").Select("*", "", false).Eq("user_id", fmt.Sprintf("%d", userID)).Limit(1, "").Execute()
 	if err != nil {
-		return nil, fmt.Errorf("failed to fetch developer: %v", err)
+		return nil, err
 	}
-
 	var result []models.Developer
 	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal developer select response: %v", err)
+		return nil, err
 	}
 	if len(result) == 0 {
 		return nil, fmt.Errorf("developer profile not found for user_id: %d", userID)
 	}
-
 	return &result[0], nil
 }

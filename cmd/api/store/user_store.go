@@ -39,23 +39,16 @@ func (s *UserStore) Create(user models.User) (models.User, error) {
 
 // GetByEmail fetches a user by their email for login
 func (s *UserStore) GetByEmail(email string) (*models.User, error) {
-	data, _, err := s.client.From("users").
-		Select("*", "", true).
-		Eq("email", email).
-		Limit(1, "").
-		Execute()
+	data, _, err := s.client.From("users").Select("*", "", false).Eq("email", email).Limit(1, "").Execute()
 	if err != nil {
 		return nil, err
 	}
-
 	var result []models.User
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, err
 	}
-
 	if len(result) == 0 {
 		return nil, fmt.Errorf("user with email %s not found", email)
 	}
-
 	return &result[0], nil
 }

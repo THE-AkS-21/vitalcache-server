@@ -55,20 +55,17 @@ func (s *DoctorStore) GetByEmail(email string) (*models.Doctor, error) {
 }
 
 // GetByID fetches a doctor by ID
-func (s *DoctorStore) GetByID(id uint) (*models.Doctor, error) {
-	data, _, err := s.client.From("doctors").Select("*", "", true).Eq("id", fmt.Sprintf("%d", id)).Execute()
+func (s *DoctorStore) GetByUserID(userID uint) (*models.Doctor, error) {
+	data, _, err := s.client.From("doctors").Select("*", "", false).Eq("user_id", fmt.Sprintf("%d", userID)).Limit(1, "").Execute()
 	if err != nil {
 		return nil, err
 	}
-
 	var result []models.Doctor
 	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, err
 	}
-
 	if len(result) == 0 {
-		return nil, fmt.Errorf("doctor with id %d not found", id)
+		return nil, fmt.Errorf("doctor profile not found for user_id: %d", userID)
 	}
-
 	return &result[0], nil
 }

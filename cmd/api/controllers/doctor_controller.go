@@ -24,7 +24,7 @@ func (dc *DoctorController) GetMyProfile(c *gin.Context) {
 		return
 	}
 
-	doctor, err := dc.store.GetByID(doctorID.(uint))
+	doctor, err := dc.store.GetByUserID(doctorID.(uint))
 	if err != nil {
 		slog.Error("Failed to get doctor profile", "error", err)
 		c.JSON(http.StatusNotFound, gin.H{"error": "Doctor profile not found"})

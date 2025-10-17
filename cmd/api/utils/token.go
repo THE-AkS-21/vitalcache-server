@@ -7,11 +7,10 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 )
 
-// GenerateToken now includes the user's role
 func GenerateToken(userID uint, role string, secret string) (string, error) {
 	claims := jwt.MapClaims{
-		"sub":  userID, // Subject of the token
-		"role": role,   // User's role
+		"sub":  userID,
+		"role": role,
 		"iat":  time.Now().Unix(),
 		"exp":  time.Now().Add(time.Hour * 24 * 7).Unix(),
 	}
@@ -19,8 +18,7 @@ func GenerateToken(userID uint, role string, secret string) (string, error) {
 	return token.SignedString([]byte(secret))
 }
 
-// ... ValidateToken remains the same for now, but you could extract the role from it too ...
-func ValidateToken(tokenString string, secret string) (float64, error) {
+func ValidateToken(tokenString string, secret string) (float64, jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -28,12 +26,12 @@ func ValidateToken(tokenString string, secret string) (float64, error) {
 		return []byte(secret), nil
 	})
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
 		if sub, ok := claims["sub"].(float64); ok {
-			return sub, nil
+			return sub, claims, nil
 		}
 	}
-	return 0, fmt.Errorf("invalid token")
+	return 0, nil, fmt.Errorf("invalid token")
 }
