@@ -18,7 +18,6 @@ func NewPatientController(store *store.PatientStore) *PatientController {
 	return &PatientController{store: store}
 }
 
-// ... CreatePatient function (no changes) ...
 type CreatePatientRequest struct {
 	Name         string `json:"name" binding:"required"`
 	Age          int    `json:"age" binding:"required,gt=0"`
@@ -51,7 +50,6 @@ func (pc *PatientController) CreatePatient(c *gin.Context) {
 	c.JSON(http.StatusCreated, createdPatient)
 }
 
-// Updated SearchPatients to use doctorID from context
 func (pc *PatientController) SearchPatients(c *gin.Context) {
 	mobile := c.Query("mobile")
 	if mobile == "" {
