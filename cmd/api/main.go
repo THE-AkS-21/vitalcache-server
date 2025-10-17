@@ -1,11 +1,11 @@
 package main
 
 import (
-	"fmt"
 	"log/slog"
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/supabase-community/supabase-go"
 
 	"github.com/THE-AkS-21/vitalcache-server/cmd/api/config"
 	"github.com/THE-AkS-21/vitalcache-server/cmd/api/database"
@@ -14,26 +14,34 @@ import (
 )
 
 func main() {
-	// Initialize logger first
 	logging.InitLogger()
 
-	// Load configuration
 	cfg := config.LoadConfig()
-
-	// Initialize database client
 	db := database.NewSupabaseClient(cfg)
 
-	// Set Gin mode for production
-	if cfg.GinMode == "release" {
+	app := &App{
+		Config: cfg,
+		DB:     db,
+	}
+
+	app.Start()
+}
+
+type App struct {
+	Config *config.Config
+	DB     *supabase.Client
+}
+
+func (a *App) Start() {
+	if a.Config.GinMode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 
-	// Setup router
-	router := routes.SetupRouter(db, cfg)
+	router := routes.SetupRouter(a.DB, a.Config)
+	slog.Info("🚀 Starting server", "port", a.Config.Port)
 
-	slog.Info(fmt.Sprintf("Starting server on port %s", cfg.Port))
-	if err := router.Run(":" + cfg.Port); err != nil {
-		slog.Error("Failed to start server", "error", err)
+	if err := router.Run(":" + a.Config.Port); err != nil {
+		slog.Error("❌ Failed to start server", "error", err)
 		os.Exit(1)
 	}
 }

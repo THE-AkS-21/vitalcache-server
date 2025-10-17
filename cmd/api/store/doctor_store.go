@@ -1,6 +1,7 @@
 package store
 
 import (
+	"encoding/json"
 	"fmt"
 
 	"github.com/THE-AkS-21/vitalcache-server/cmd/api/models"
@@ -15,47 +16,59 @@ func NewDoctorStore(client *supa.Client) *DoctorStore {
 	return &DoctorStore{client: client}
 }
 
+// Create a new doctor
 func (s *DoctorStore) Create(doctor models.Doctor) (models.Doctor, error) {
-	var result []models.Doctor
-	err := s.client.From("doctors").Insert(doctor).Execute(&result)
+	data, _, err := s.client.From("doctors").Insert(doctor, false, "representation", "", "public").Execute()
 	if err != nil {
 		return models.Doctor{}, err
 	}
+
+	var result []models.Doctor
+	if err := json.Unmarshal(data, &result); err != nil {
+		return models.Doctor{}, err
+	}
+
 	if len(result) == 0 {
 		return models.Doctor{}, fmt.Errorf("failed to create doctor, no result returned")
 	}
+
 	return result[0], nil
 }
 
+// GetByEmail fetches a doctor by email
 func (s *DoctorStore) GetByEmail(email string) (*models.Doctor, error) {
-	var result []models.Doctor
-	err := s.client.From("doctors").
-		Select("*").
-		Eq("email", email).
-		Limit(1).
-		Execute(&result)
+	data, _, err := s.client.From("doctors").Select("*", "", true).Eq("email", email).Execute()
 	if err != nil {
 		return nil, err
 	}
+
+	var result []models.Doctor
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+
 	if len(result) == 0 {
 		return nil, fmt.Errorf("doctor with email %s not found", email)
 	}
+
 	return &result[0], nil
 }
 
-// New Function: Get a single doctor by their ID
+// GetByID fetches a doctor by ID
 func (s *DoctorStore) GetByID(id uint) (*models.Doctor, error) {
-	var result []models.Doctor
-	err := s.client.From("doctors").
-		Select("*").
-		Eq("id", fmt.Sprintf("%d", id)).
-		Limit(1).
-		Execute(&result)
+	data, _, err := s.client.From("doctors").Select("*", "", true).Eq("id", fmt.Sprintf("%d", id)).Execute()
 	if err != nil {
 		return nil, err
 	}
+
+	var result []models.Doctor
+	if err := json.Unmarshal(data, &result); err != nil {
+		return nil, err
+	}
+
 	if len(result) == 0 {
 		return nil, fmt.Errorf("doctor with id %d not found", id)
 	}
+
 	return &result[0], nil
 }
