@@ -4,6 +4,7 @@ import (
 	"github.com/THE-AkS-21/vitalcache-server/cmd/api/config"
 	"github.com/THE-AkS-21/vitalcache-server/cmd/api/controllers"
 	"github.com/THE-AkS-21/vitalcache-server/cmd/api/middleware"
+	"github.com/THE-AkS-21/vitalcache-server/cmd/api/services"
 	"github.com/THE-AkS-21/vitalcache-server/cmd/api/store"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -13,6 +14,7 @@ import (
 func SetupRouter(db *supa.Client, cfg *config.Config) *gin.Engine {
 	r := gin.Default()
 	r.Use(middleware.LoggerMiddleware())
+	r.Use(middleware.RateLimitMiddleware())
 
 	corsConfig := cors.DefaultConfig()
 	corsConfig.AllowAllOrigins = true
@@ -26,11 +28,17 @@ func SetupRouter(db *supa.Client, cfg *config.Config) *gin.Engine {
 	patientStore := store.NewPatientStore(db)
 	medicineStore := store.NewMedicineStore(db)
 
+	// Services
+	emailService := services.NewEmailService()
+	// Corrected: Pass all required dependencies
+	prescriptionService := services.NewPrescriptionService(patientStore, emailService, db)
+
 	// Controllers
 	authController := controllers.NewAuthController(userStore, db, cfg)
 	profileController := controllers.NewProfileController(doctorStore, developerStore)
 	patientController := controllers.NewPatientController(patientStore)
 	medicineController := controllers.NewMedicineController(medicineStore)
+	prescriptionController := controllers.NewPrescriptionController(prescriptionService)
 
 	api := r.Group("/api")
 	{
@@ -40,7 +48,6 @@ func SetupRouter(db *supa.Client, cfg *config.Config) *gin.Engine {
 			auth.POST("/register", authController.Register)
 			auth.POST("/login", authController.Login)
 		}
-		// Corrected: Moved medicine route to be public
 		api.GET("/medicines", medicineController.GetAllMedicines)
 
 		// Protected routes
@@ -49,11 +56,14 @@ func SetupRouter(db *supa.Client, cfg *config.Config) *gin.Engine {
 		{
 			v1.GET("/profiles/me", profileController.GetMyProfile)
 
-			// Patient management (ensure logic in controller checks for 'doctor' role if needed)
+			// Patient routes
 			v1.POST("/patients", patientController.CreatePatient)
 			v1.GET("/patients/search", patientController.SearchPatients)
 			v1.GET("/patients/:id", patientController.GetPatientByID)
 			v1.PATCH("/patients/:id", patientController.UpdatePatient)
+
+			// New Prescription Route
+			v1.POST("/prescriptions/send", prescriptionController.SendPrescription)
 		}
 	}
 	return r

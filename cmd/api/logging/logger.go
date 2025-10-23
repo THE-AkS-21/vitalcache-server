@@ -1,21 +1,33 @@
 package logging
 
 import (
+	"io"
 	"log/slog"
 	"os"
+
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 func InitLogger() {
+	var output io.Writer
 	var handler slog.Handler
 
-	// Use a more readable logger for development
 	if os.Getenv("GIN_MODE") != "release" {
-		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
+		// In development, log to the console with colors
+		output = os.Stdout
+		handler = slog.NewTextHandler(output, &slog.HandlerOptions{
 			Level: slog.LevelDebug,
 		})
 	} else {
-		// Use JSON logger for production for easier parsing by log collectors
-		handler = slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		// In production, log to a file with rotation
+		output = &lumberjack.Logger{
+			Filename:   "logs/vitalcache.log",
+			MaxSize:    10, // megabytes
+			MaxBackups: 3,
+			MaxAge:     28, // days
+			Compress:   true,
+		}
+		handler = slog.NewJSONHandler(output, &slog.HandlerOptions{
 			Level: slog.LevelInfo,
 		})
 	}
