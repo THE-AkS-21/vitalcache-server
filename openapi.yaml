@@ -1,0 +1,466 @@
+openapi: 3.1.0
+info:
+  title: VitalCache API
+  version: 1.0.0
+  description: >
+    Clinic management backend for doctors, developers, and patients.
+    JWT bearer auth with rotating HS256 keys. Supabase-backed storage and DB.
+
+servers:
+  - url: http://localhost:8080
+    description: Local
+  - url: https://api.vitalcache.example.com
+    description: Production
+
+tags:
+  - name: Auth
+  - name: Medicines
+  - name: Profiles
+  - name: Patients
+  - name: Prescriptions
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+      required: [error]
+
+    RegisterRequest:
+      type: object
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        role: { type: string, enum: [doctor, developer, patient] }
+        designation: { type: string, description: "For role=doctor (e.g., 'Cardiologist')" }
+      required: [name, email, password, role]
+
+    LoginRequest:
+      type: object
+      properties:
+        email: { type: string, format: email }
+        password: { type: string }
+      required: [email, password]
+
+    LoginResponse:
+      type: object
+      properties:
+        token: { type: string, description: "JWT access token (HS256, with kid)" }
+        role:  { type: string }
+      required: [token, role]
+
+    User:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        email: { type: string, format: email }
+        role: { type: string }
+        createdAt: { type: string, format: date-time }
+
+    Doctor:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        designation: { type: string }
+        userId: { type: integer, format: int64 }
+
+    Developer:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        role: { type: string }
+        userId: { type: integer, format: int64 }
+
+    Patient:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        age: { type: integer }
+        sex: { type: string }
+        mobile_number: { type: string }
+        email: { type: string, format: email }
+        number_of_visits: { type: integer }
+        doctor_id: { type: integer, format: int64 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    CreatePatientRequest:
+      type: object
+      properties:
+        name: { type: string }
+        age: { type: integer, minimum: 1 }
+        sex: { type: string }
+        mobile_number: { type: string }
+        email: { type: string, format: email }
+      required: [name, age, mobile_number]
+
+    UpdatePatientRequest:
+      type: object
+      properties:
+        name: { type: string }
+        age: { type: integer, minimum: 1 }
+        sex: { type: string }
+        email: { type: string, format: email }
+
+    Medicine:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        dose: { type: string }
+        duration_days: { type: integer }
+        frequency: { type: string }
+        recommended_brands: { type: string }
+        created_at: { type: string, format: date-time }
+
+    Prescription:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        patient_id: { type: integer, format: int64 }
+        doctor_id: { type: integer, format: int64 }
+        file_url: { type: string, description: "Path in Supabase Storage (may be empty when upload failed)" }
+        sent_at: { type: string, format: date-time }
+
+paths:
+  /api/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id: { type: integer, format: int64 }
+        '400':
+          description: Bad Request
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login and obtain JWT
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/LoginResponse' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+
+  /api/medicines:
+    get:
+      tags: [Medicines]
+      summary: List medicines (public)
+      parameters:
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Medicine' }
+        '500':
+          description: Server Error
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+
+  /api/v1/profiles/me:
+    get:
+      tags: [Profiles]
+      summary: Get current user's profile (doctor or developer)
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/Doctor'
+                  - $ref: '#/components/schemas/Developer'
+        '401':
+          description: Unauthorized
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '403':
+          description: Forbidden
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+
+  /api/v1/patients:
+    post:
+      tags: [Patients]
+      summary: Create a patient (doctor-only)
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePatientRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Patient' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '403':
+          description: Forbidden (role not doctor)
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '500':
+          description: Server Error
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+
+  /api/v1/patients/search:
+    get:
+      tags: [Patients]
+      summary: Search patients by mobile (doctor-only)
+      description: >
+        Currently supports exact mobile match via `mobile` query parameter.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: query
+          name: mobile
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Patient' }
+        '400':
+          description: Bad Request
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '401':
+          description: Unauthorized
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '403':
+          description: Forbidden (role not doctor)
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+
+  /api/v1/patients/{id}:
+    get:
+      tags: [Patients]
+      summary: Get patient by ID (doctor-only; ownership/link enforced)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Patient' }
+        '400':
+          description: Bad Request
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '401':
+          description: Unauthorized
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '403':
+          description: Forbidden (not treating doctor)
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '404':
+          description: Not Found
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+
+    patch:
+      tags: [Patients]
+      summary: Update patient (doctor-only; ownership/link enforced)
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdatePatientRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Patient' }
+        '400':
+          description: Bad Request
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '401':
+          description: Unauthorized
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '403':
+          description: Forbidden (not treating doctor)
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '404':
+          description: Not Found
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+
+  /api/v1/patients/{id}/prescriptions:
+    get:
+      tags: [Prescriptions]
+      summary: Patient prescription history (doctor-only; ownership/link enforced)
+      description: >
+        Lists prescriptions for a patient. Optional date range via `start` / `end`
+        (YYYY-MM-DD or RFC3339). Ordered by `sent_at` descending.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer, format: int64 }
+        - in: query
+          name: start
+          schema: { type: string, description: "YYYY-MM-DD or RFC3339" }
+        - in: query
+          name: end
+          schema: { type: string, description: "YYYY-MM-DD or RFC3339" }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, default: 50 }
+        - in: query
+          name: offset
+          schema: { type: integer, minimum: 0, default: 0 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  patient_id: { type: integer, format: int64 }
+                  count: { type: integer }
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/Prescription' }
+        '400':
+          description: Bad Request
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '401':
+          description: Unauthorized
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '403':
+          description: Forbidden (not treating doctor)
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+
+  /api/v1/prescriptions/send:
+    post:
+      tags: [Prescriptions]
+      summary: Upload and queue a prescription file for a patient (doctor-only)
+      description: >
+        Accepts a PDF/JPG/PNG. The file is uploaded, persisted as a prescription row,
+        and queued for background processing. Currently the worker just logs and deletes the temp file.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [patientId, prescriptionFile]
+              properties:
+                patientId:
+                  type: string
+                  description: Patient ID (numeric, but sent as string in form data)
+                prescriptionFile:
+                  type: string
+                  format: binary
+                  description: PDF/PNG/JPG up to 5MB
+      responses:
+        '202':
+          description: Accepted (queued)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: "queued for sending" }
+        '400':
+          description: Bad Request
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '401':
+          description: Unauthorized
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '403':
+          description: Forbidden (role not doctor)
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '415':
+          description: Unsupported Media Type
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '429':
+          description: Too Many Requests
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }
+        '500':
+          description: Server Error
+          content:
+            application/json: { schema: { $ref: '#/components/schemas/Error' } }

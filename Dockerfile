@@ -1,37 +1,44 @@
 # ---- Build Stage ----
-# Use the official Golang image to build the application
 FROM golang:1.21-alpine AS builder
 
-# Set the working directory inside the container
 WORKDIR /app
 
-# Copy go.mod and go.sum files to download dependencies
+# Install build deps (git needed for private Go modules sometimes)
+RUN apk add --no-cache git
+
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy the entire source code
 COPY . .
 
-# Build the application, creating a static binary.
-# CGO_ENABLED=0 is important for creating a static binary for Alpine.
-# -o /app/server creates the output binary named 'server' in the /app directory.
+# Build static binary
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/api
 
-# ---- Final Stage ----
-# Use a minimal, non-root Alpine image for the final container
-FROM alpine:latest
+# ---- Runtime Stage ----
+FROM alpine:3.19
 
-# Set a non-root user for security
+# Install CA certificates (REQUIRED for AWS + Supabase HTTPS)
+RUN apk add --no-cache ca-certificates tzdata \
+    && update-ca-certificates
+
+# Create unprivileged user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
 WORKDIR /home/appuser
 
-# Copy ONLY the compiled binary from the builder stage
-COPY --from=builder /app/server .
+# Copy binary
+COPY --from=builder /app/server ./server
 
-# Expose the port the app runs on
+# Make sure it's executable
+RUN chmod +x ./server
+
+# Expose port (can be overridden by env var at runtime)
 EXPOSE 8080
 
-# The command to run when the container starts
+# Optional: Health check (depends on Gin server having /health)
+# HEALTHCHECK --interval=30s --timeout=3s \
+#   CMD wget -qO- http://localhost:8080/health || exit 1
+
+# Run the service
 ENTRYPOINT ["./server"]

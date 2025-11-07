@@ -1,0 +1,34 @@
+package middlewares
+
+import (
+	"net/http"
+
+	"github.com/THE-AkS-21/vitalcache-server/internal/domain/policies"
+	"github.com/gin-gonic/gin"
+)
+
+// RequireRole ensures the caller has one of the allowed roles.
+func RequireRole(allowed ...string) gin.HandlerFunc {
+	allowedSet := make(map[string]struct{}, len(allowed))
+	for _, r := range allowed {
+		allowedSet[r] = struct{}{}
+	}
+
+	return func(c *gin.Context) {
+		roleVal, ok := c.Get("user_role")
+		if !ok {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "role not found on context"})
+			return
+		}
+		role, _ := roleVal.(string)
+		if _, ok := allowedSet[role]; !ok {
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "insufficient role"})
+			return
+		}
+		c.Next()
+	}
+}
+
+// Sugar helpers, if you prefer readable guards
+func RequireDoctor() gin.HandlerFunc    { return RequireRole(policies.RoleDoctor) }
+func RequireDeveloper() gin.HandlerFunc { return RequireRole(policies.RoleDeveloper) }
