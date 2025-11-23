@@ -22,10 +22,6 @@ type Keyring struct {
 type SecretPayload struct {
 	SupabaseURL string  `json:"SUPABASE_URL"`
 	SupabaseKey string  `json:"SUPABASE_KEY"`
-	SMTPHost    string  `json:"SMTP_HOST"`
-	SMTPPort    string  `json:"SMTP_PORT"`
-	SMTPUser    string  `json:"SMTP_USER"`
-	SMTPPass    string  `json:"SMTP_PASS"`
 	JWTKeyring  Keyring `json:"JWT_KEYRING"`
 }
 
@@ -34,14 +30,14 @@ type SecretsClient struct {
 	secret string
 }
 
+// NewSecretsClient returns nil (no error) if AWS is not configured, enabling local .env fallback.
 func NewSecretsClient(ctx context.Context) (*SecretsClient, error) {
 	region := os.Getenv("AWS_REGION")
-	if region == "" {
-		return nil, fmt.Errorf("AWS_REGION is required")
-	}
 	secretID := os.Getenv("AWS_SECRET_ID")
-	if secretID == "" {
-		return nil, fmt.Errorf("AWS_SECRET_ID is required")
+
+	// Local/dev fallback: if either is missing, we disable AWS secrets.
+	if region == "" || secretID == "" {
+		return nil, nil
 	}
 
 	awscfg, err := cfgv2.LoadDefaultConfig(ctx, cfgv2.WithRegion(region))

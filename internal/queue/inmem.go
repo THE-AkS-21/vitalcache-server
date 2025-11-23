@@ -14,6 +14,7 @@ const TypePrescriptionSend = "prescription:send"
 type Client interface {
 	EnqueuePrescription(ctx context.Context, patientID uint, filePath, fileName string) error
 	StartWorker(ctx context.Context) error
+	Dequeue(ctx context.Context) (string, error)
 }
 
 type inmemQ struct {
@@ -39,6 +40,17 @@ func (q *inmemQ) EnqueuePrescription(ctx context.Context, patientID uint, filePa
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+func (q *inmemQ) Dequeue(ctx context.Context) (string, error) {
+	select {
+	case b := <-q.ch:
+		return string(b), nil
+	case <-ctx.Done():
+		return "", ctx.Err()
+	default:
+		return "", os.ErrNotExist // Empty queue
 	}
 }
 

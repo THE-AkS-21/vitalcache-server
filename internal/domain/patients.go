@@ -8,9 +8,9 @@ type Patient struct {
 	Age            int
 	Sex            string
 	MobileNumber   string
-	Email          string
 	CreatedAt      time.Time
 	UpdatedAt      time.Time
 	NumberOfVisits int
 	DoctorID       uint
+	UserID         *uint
 }

@@ -13,28 +13,40 @@ type Service struct{ store *supabase.PatientsStore }
 
 func NewService(s *supabase.PatientsStore) *Service { return &Service{store: s} }
 
-func (s *Service) Create(ctx context.Context, req dto.CreatePatientRequest, doctorID uint) (domain.Patient, error) {
+func (s *Service) Create(ctx context.Context, token string, req dto.CreatePatientRequest) (domain.Patient, error) {
 	p := domain.Patient{
 		Name:         req.Name,
 		Age:          req.Age,
 		Sex:          req.Sex,
 		MobileNumber: req.MobileNumber,
-		Email:        req.Email,
-		DoctorID:     doctorID,
+		DoctorID:     uint(*req.DoctorID),
 		CreatedAt:    time.Now(),
 	}
-	return s.store.Create(ctx, p)
+	out, err := s.store.Create(ctx, token, &p)
+	if err != nil {
+		return domain.Patient{}, err
+	}
+	return *out, nil
 }
 
-func (s *Service) GetByMobile(ctx context.Context, mobile string, doctorID uint) ([]domain.Patient, error) {
-	return s.store.GetByMobile(ctx, mobile, doctorID)
+//func (s *Service) GetByMobile(ctx context.Context, userID int, role, mobile string) ([]domain.Patient, error) {
+//	return s.store.SearchByMobile(ctx, userID, role, mobile, 50, 0)
+//}
+
+func (s *Service) SearchByMobile(
+	ctx context.Context,
+	token string,
+	mobile string,
+	limit, offset int,
+) ([]domain.Patient, error) {
+	return s.store.SearchByMobile(ctx, token, mobile, limit, offset)
 }
 
-func (s *Service) GetByID(ctx context.Context, id, doctorID uint) (*domain.Patient, error) {
-	return s.store.GetByID(ctx, id, doctorID)
+func (s *Service) GetByID(ctx context.Context, token string, id int) (*domain.Patient, error) {
+	return s.store.GetByID(ctx, token, id)
 }
 
-func (s *Service) Update(ctx context.Context, id, doctorID uint, req dto.UpdatePatientRequest) (domain.Patient, error) {
+func (s *Service) UpdatePartial(ctx context.Context, token string, id int, req dto.UpdatePatientRequest) (domain.Patient, error) {
 	updates := map[string]any{}
 	if req.Name != "" {
 		updates["name"] = req.Name
@@ -45,9 +57,10 @@ func (s *Service) Update(ctx context.Context, id, doctorID uint, req dto.UpdateP
 	if req.Sex != "" {
 		updates["sex"] = req.Sex
 	}
-	if req.Email != "" {
-		updates["email"] = req.Email
-	}
 	updates["updated_at"] = time.Now()
-	return s.store.Update(ctx, id, doctorID, updates)
+	out, err := s.store.UpdatePartial(ctx, token, id, updates)
+	if err != nil {
+		return domain.Patient{}, err
+	}
+	return *out, nil
 }

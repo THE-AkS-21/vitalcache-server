@@ -1,11 +1,15 @@
 package domain
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 type Developer struct {
-	ID        uint
-	Name      string
-	Role      string
-	UserID    uint
-	CreatedAt time.Time
+	ID          uint            `json:"id"`
+	UserID      uint            `json:"user_id"`
+	Name        string          `json:"name"`
+	Role        string          `json:"role"`        // godfather, senior, junior, intern
+	Permissions json.RawMessage `json:"permissions"` // JSONB for dynamic Junior permissions
+	CreatedAt   time.Time       `json:"created_at"`
 }

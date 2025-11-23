@@ -1,25 +1,27 @@
 # ---- Build Stage ----
-FROM golang:1.21-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
-# Install build deps (git needed for private Go modules sometimes)
+# Install build deps
 RUN apk add --no-cache git
 
+# Download dependencies first (cached if go.mod/go.sum don't change)
 COPY go.mod go.sum ./
 RUN go mod download
 
+# Copy source
 COPY . .
 
-# Build static binary
-RUN CGO_ENABLED=0 GOOS=linux go build -o /app/server ./cmd/api
+# Build static binary with optimizations
+# -ldflags="-s -w" strips debug info for smaller binary
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /app/server ./cmd/api
 
 # ---- Runtime Stage ----
 FROM alpine:3.19
 
-# Install CA certificates (REQUIRED for AWS + Supabase HTTPS)
-RUN apk add --no-cache ca-certificates tzdata \
-    && update-ca-certificates
+# Install CA certificates and timezone data
+RUN apk add --no-cache ca-certificates tzdata
 
 # Create unprivileged user
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
@@ -27,18 +29,11 @@ USER appuser
 
 WORKDIR /home/appuser
 
-# Copy binary
+# Copy binary from builder
 COPY --from=builder /app/server ./server
 
-# Make sure it's executable
-RUN chmod +x ./server
-
-# Expose port (can be overridden by env var at runtime)
+# Expose port
 EXPOSE 8080
-
-# Optional: Health check (depends on Gin server having /health)
-# HEALTHCHECK --interval=30s --timeout=3s \
-#   CMD wget -qO- http://localhost:8080/health || exit 1
 
 # Run the service
 ENTRYPOINT ["./server"]

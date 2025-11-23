@@ -8,6 +8,14 @@ import (
 	"github.com/golang-jwt/jwt/v4"
 )
 
+type Claims struct {
+	Sub       int    `json:"sub"`                 // users.id
+	Role      string `json:"role"`                // doctor|developer|patient
+	DoctorID  *int   `json:"doctor_id,omitempty"` // set for doctors
+	ExpiresAt int64  `json:"exp"`
+	IssuedAt  int64  `json:"iat"`
+}
+
 func GenerateToken(userID uint, role string, ks JWTKeySource, ttl time.Duration) (string, error) {
 	kid, key := ks.ActiveKey()
 	if len(key) == 0 {
@@ -74,4 +82,8 @@ func ValidateToken(token string, ks JWTKeySource) (uint, jwt.MapClaims, error) {
 		}
 	}
 	return 0, nil, fmt.Errorf("invalid token")
+}
+
+func (c *Claims) IsExpired() bool {
+	return time.Now().Unix() >= c.ExpiresAt
 }

@@ -6,6 +6,7 @@ type CreatePatientRequest struct {
 	Sex          string `json:"sex"`
 	MobileNumber string `json:"mobile_number" binding:"required"`
 	Email        string `json:"email,omitempty,email"`
+	DoctorID     *int   `json:"doctor_id,omitempty"` // set by server from token
 }
 
 type UpdatePatientRequest struct {

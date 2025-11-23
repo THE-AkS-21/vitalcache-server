@@ -4,72 +4,62 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/THE-AkS-21/vitalcache-server/internal/domain"
-	"github.com/supabase-community/postgrest-go"
-	supa "github.com/supabase-community/supabase-go"
+	postgrest "github.com/supabase-community/postgrest-go"
 )
 
-type PrescriptionsStore struct{ c *supa.Client }
+type PrescriptionsStore struct{ db *Client }
 
-func NewPrescriptionsStore(c *supa.Client) *PrescriptionsStore { return &PrescriptionsStore{c: c} }
+func NewPrescriptionsStore(db *Client) *PrescriptionsStore { return &PrescriptionsStore{db: db} }
 
-// Create inserts a prescription row and returns the stored record.
-func (s *PrescriptionsStore) Create(ctx context.Context, p domain.Prescription) (domain.Prescription, error) {
-	if p.SentAt.IsZero() {
-		p.SentAt = time.Now().UTC()
-	}
-	data, _, err := s.c.From("prescriptions").Insert(p, false, "representation", "", "public").Execute()
+func (s *PrescriptionsStore) Create(ctx context.Context, token string, p *domain.Prescription) (*domain.Prescription, error) {
+	pc := s.db.WithRLS(ctx, token)
+	data, _, err := pc.From("prescriptions").Insert(p, false, "", "representation", "").Execute()
 	if err != nil {
-		return domain.Prescription{}, err
+		return nil, fmt.Errorf("insert prescription: %w", err)
 	}
 	var out []domain.Prescription
-	if err := json.Unmarshal(data, &out); err != nil {
-		return domain.Prescription{}, err
+	if err := json.Unmarshal(data, &out); err != nil || len(out) == 0 {
+		return nil, fmt.Errorf("decode prescription")
 	}
-	if len(out) == 0 {
-		return domain.Prescription{}, fmt.Errorf("no prescription returned")
-	}
-	return out[0], nil
+	return &out[0], nil
 }
 
-// ListByPatientVisibleToDoctor returns prescriptions for a patient visible to the doctor.
-// Use link-table patient_doctors if available; otherwise fallback to ownership on patients.
-func (s *PrescriptionsStore) ListByPatientVisibleToDoctorRange(
-	ctx context.Context,
-	patientID, doctorID uint, // doctorID unused here; RLS handles visibility
-	startRFC3339, endRFC3339 string, // optional
-	limit, offset int,
-) ([]domain.Prescription, error) {
-
+func (s *PrescriptionsStore) ListByPatient(ctx context.Context, token string, patientID int, start, end *time.Time, limit, offset int) ([]domain.Prescription, error) {
 	if limit <= 0 {
 		limit = 50
+	}
+	if limit > 100 {
+		limit = 100
 	}
 	if offset < 0 {
 		offset = 0
 	}
 
-	q := s.c.From("prescriptions").
-		Select("*", "", true).
-		Eq("patient_id", fmt.Sprintf("%d", patientID)).
-		Order("sent_at", &postgrest.OrderOpts{Ascending: false})
+	pc := s.db.WithRLS(ctx, token)
+	q := pc.From("prescriptions").
+		Select("id,patient_id,doctor_id,bundle_id,notes,file_url,sent_at,created_at", "", true).
+		Eq("patient_id", strconv.Itoa(patientID)).
+		Order("sent_at", &postgrest.OrderOpts{Ascending: false}).
+		Range(offset, offset+limit-1, "")
 
-	if startRFC3339 != "" {
-		q = q.Gte("sent_at", startRFC3339)
+	if start != nil {
+		q = q.Gte("sent_at", start.UTC().Format(time.RFC3339))
 	}
-	if endRFC3339 != "" {
-		q = q.Lte("sent_at", endRFC3339)
+	if end != nil {
+		q = q.Lte("sent_at", end.UTC().Format(time.RFC3339))
 	}
 
-	data, _, err := q.Range(offset, offset+limit-1, "").Execute()
+	data, _, err := q.Execute()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list prescriptions: %w", err)
 	}
-
 	var out []domain.Prescription
 	if err := json.Unmarshal(data, &out); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("decode prescriptions: %w", err)
 	}
 	return out, nil
 }

@@ -1,32 +1,44 @@
 package handlers
 
 import (
-	"net/http"
-
+	"github.com/THE-AkS-21/vitalcache-server/internal/app/middlewares"
 	"github.com/THE-AkS-21/vitalcache-server/internal/http/handlers/hdeps"
 	"github.com/gin-gonic/gin"
+	"net/http"
+	"strconv"
 )
 
 func MyProfile(d hdeps.Deps) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userID, _ := c.Get("user_id")
-		role, _ := c.Get("user_role")
+		userID := middlewares.GetUserID(c)
+		role := middlewares.GetRole(c)
 
 		switch role {
 		case "doctor":
-			prof, err := d.Doctors.GetByUserID(uint(userID.(uint)))
-			if err != nil {
+			data, _, err := d.DB.ForUser(userID, role).
+				From("doctors").
+				Select("*", "", false).
+				Eq("user_id", strconv.Itoa(userID)).
+				Single().
+				Execute()
+			if err != nil || len(data) == 0 {
 				c.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
 				return
 			}
-			c.JSON(http.StatusOK, prof)
+			c.Data(http.StatusOK, "application/json", data)
+
 		case "developer":
-			prof, err := d.Developers.GetByUserID(uint(userID.(uint)))
-			if err != nil {
+			data, _, err := d.DB.ForUser(userID, role).
+				From("developers").
+				Select("*", "", false).
+				Eq("user_id", strconv.Itoa(userID)).
+				Single().
+				Execute()
+			if err != nil || len(data) == 0 {
 				c.JSON(http.StatusNotFound, gin.H{"error": "profile not found"})
 				return
 			}
-			c.JSON(http.StatusOK, prof)
+			c.Data(http.StatusOK, "application/json", data)
 		default:
 			c.JSON(http.StatusForbidden, gin.H{"error": "no profile for this role"})
 		}

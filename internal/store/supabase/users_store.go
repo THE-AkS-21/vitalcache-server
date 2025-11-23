@@ -6,12 +6,12 @@ import (
 	"fmt"
 
 	"github.com/THE-AkS-21/vitalcache-server/internal/domain"
-	supa "github.com/supabase-community/supabase-go"
+	postgrest "github.com/supabase-community/postgrest-go"
 )
 
-type UsersStore struct{ c *supa.Client }
+type UsersStore struct{ c *postgrest.Client }
 
-func NewUsersStore(c *supa.Client) *UsersStore { return &UsersStore{c: c} }
+func NewUsersStore(c *Client) *UsersStore { return &UsersStore{c: c.core()} }
 
 func (s *UsersStore) Create(ctx context.Context, u domain.User) (domain.User, error) {
 	data, _, err := s.c.From("users").Insert(u, false, "representation", "", "public").Execute()
@@ -29,17 +29,23 @@ func (s *UsersStore) Create(ctx context.Context, u domain.User) (domain.User, er
 }
 
 func (s *UsersStore) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
+	println("DEBUG [UsersStore]: GetByEmail called with email:", email)
 	data, _, err := s.c.From("users").Select("*", "", false).Eq("email", email).Limit(1, "").Execute()
 	if err != nil {
+		println("DEBUG [UsersStore]: Query error:", err.Error())
 		return nil, err
 	}
+	println("DEBUG [UsersStore]: Query successful, data length:", len(data))
 	var out []domain.User
 	if err := json.Unmarshal(data, &out); err != nil {
+		println("DEBUG [UsersStore]: Unmarshal error:", err.Error())
 		return nil, err
 	}
 	if len(out) == 0 {
+		println("DEBUG [UsersStore]: No user found for email:", email)
 		return nil, fmt.Errorf("user not found")
 	}
+	println("DEBUG [UsersStore]: User found, ID:", out[0].ID, "Role:", out[0].Role)
 	return &out[0], nil
 }
 
@@ -53,7 +59,7 @@ func (s *UsersStore) RegisterViaRPC(ctx context.Context, email, hash, role, name
 		"profile_specific_role": specificRole,
 		"profile_type":          profileType,
 	}
-	res := s.c.Rpc("handle_new_user_registration", "public", payload)
+	res := s.c.Rpc("handle_new_user_registration", "", payload)
 	if res != "" { // v0.0.4 returns string error
 		return 0, fmt.Errorf("registration rpc failed: %s", res)
 	}

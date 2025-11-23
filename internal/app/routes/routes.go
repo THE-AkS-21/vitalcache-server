@@ -1,85 +1,64 @@
 package routes
 
 import (
-	"net/http"
-
 	"github.com/THE-AkS-21/vitalcache-server/internal/app/middlewares"
 	"github.com/THE-AkS-21/vitalcache-server/internal/http/handlers"
 	"github.com/THE-AkS-21/vitalcache-server/internal/http/handlers/hdeps"
+	"github.com/THE-AkS-21/vitalcache-server/internal/infra/kafka"
+	"github.com/THE-AkS-21/vitalcache-server/internal/infra/redis"
 	"github.com/THE-AkS-21/vitalcache-server/internal/queue"
-	"github.com/THE-AkS-21/vitalcache-server/internal/service/auth"
-	"github.com/THE-AkS-21/vitalcache-server/internal/service/patients"
-	"github.com/THE-AkS-21/vitalcache-server/internal/service/prescriptions"
 	"github.com/THE-AkS-21/vitalcache-server/internal/store/supabase"
 	"github.com/THE-AkS-21/vitalcache-server/pkg/config"
 	"github.com/THE-AkS-21/vitalcache-server/pkg/jwt"
 	"github.com/gin-gonic/gin"
-	supa "github.com/supabase-community/supabase-go"
 )
 
-func Register(r *gin.Engine, db *supa.Client, ks jwt.JWTKeySource, secrets *config.SecretPayload, q queue.Client) {
-	// Stores
-	usersStore := supabase.NewUsersStore(db)
-	doctorsStore := supabase.NewDoctorsStore(db)
-	developersStore := supabase.NewDevelopersStore(db)
-	patientsStore := supabase.NewPatientsStore(db)
-	medicinesStore := supabase.NewMedicinesStore(db)
+// Register wires all API routes and dependencies into the gin.Engine.
+func Register(r *gin.Engine, db *supabase.Client, ks jwt.JWTKeySource, secrets *config.SecretPayload, q queue.Client, rdb *redis.Client, kp *kafka.Producer) {
+	deps := hdeps.New(db, ks, secrets, q, rdb, kp)
 
-	// Services
-	authSvc := auth.NewService(usersStore, doctorsStore, developersStore, ks)
-	patSvc := patients.NewService(patientsStore)
-	presSvc := prescriptions.NewService(patientsStore, db, q) // in-memory queue; no email
-
-	// Handler deps
-	deps := hdeps.Deps{
-		Auth:          authSvc,
-		Patients:      patSvc,
-		Prescriptions: presSvc,
-		Users:         usersStore,
-		Doctors:       doctorsStore,
-		Developers:    developersStore,
-		Medicines:     medicinesStore,
-		KeySource:     ks,
-	}
-
-	// Public
 	api := r.Group("/api")
 	{
-		auth := api.Group("/auth")
-		auth.POST("/register", handlers.Register(deps))
-		auth.POST("/login", handlers.Login(deps))
-
-		api.GET("/medicines", handlers.ListMedicines(deps))
+		// auth (server-validated, httpOnly refresh cookie)
+		api.POST("/auth/register", handlers.Register(deps))
+		api.POST("/auth/login", handlers.Login(deps))
+		api.POST("/auth/refresh", handlers.Refresh(deps))
+		api.POST("/auth/logout", handlers.Logout(deps))
 	}
 
-	// Protected
-	v1 := api.Group("/v1")
-	v1.Use(middlewares.Auth(ks))
+	v1 := r.Group("/api/v1")
 	{
-		// doctor-only routes
+		// JWT auth middleware (sets user_id:int, user_role:string, doctor_id:int)
+		v1.Use(middlewares.Auth(deps.JWT))
+
+		v1.GET("/profiles/me", handlers.MyProfile(deps))
+
+		// All authenticated users can view medicines
+		v1.GET("/medicines", handlers.ListMedicines(deps))
+
+		// ✅ shared search route (doctor + developer)
+		search := v1.Group("/")
+		search.Use(middlewares.RequireRole("doctor", "developer"))
+		{
+			search.GET("/patients/search", handlers.SearchPatients(deps))
+		}
+
+		// ✅ doctor-only restricted endpoints
 		doctor := v1.Group("/")
 		doctor.Use(middlewares.RequireDoctor())
+		{
+			doctor.POST("/patients", handlers.CreatePatient(deps))
+			doctor.GET("/patients/:id", handlers.GetPatientByID(deps))
+			doctor.PATCH("/patients/:id", handlers.UpdatePatient(deps))
+			doctor.GET("/patients/:id/prescriptions", handlers.PatientPrescriptionHistory(deps))
+			doctor.POST("/prescriptions", handlers.CreatePrescription(deps))
+		}
 
-		doctor.GET("/profiles/me", handlers.MyProfile(deps))
-		doctor.POST("/patients", handlers.CreatePatient(deps))
-		doctor.GET("/patients/search", handlers.SearchPatients(deps))
-		doctor.GET("/patients/:id", handlers.GetPatientByID(deps))
-		doctor.PATCH("/patients/:id", handlers.UpdatePatient(deps))
-		doctor.GET("/patients/:id/prescriptions", handlers.PatientPrescriptionHistory(deps))
-		doctor.POST("/prescriptions/send", handlers.SendPrescription(deps))
+		// developers-only admin endpoints (no PHI response)
+		dev := v1.Group("/admin")
+		dev.Use(middlewares.RequireDeveloper())
+		{
+			// future: manage patient_doctors links
+		}
 	}
-
-}
-
-func RegisterPublicRoutes(r *gin.Engine) {
-
-	// --- Health Endpoints ---
-	r.GET("/healthz", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok"})
-	})
-
-	r.GET("/healthz/ready", func(c *gin.Context) {
-		// TODO: Inject real checks via deps (db, secrets, queue, etc.)
-		c.JSON(http.StatusOK, gin.H{"status": "ready"})
-	})
 }
