@@ -5,6 +5,8 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/THE-AkS-21/vitalcache-server/internal/app"
@@ -28,8 +30,9 @@ func main() {
 	// 1) Try AWS secrets; if not configured, fall back to .env
 	secClient, err := config.NewSecretsClient(ctx)
 	if err != nil {
-		slog.Error("aws secrets init failed", "err", err)
-		os.Exit(1)
+		slog.Warn("aws secrets init failed, falling back to .env", "err", err)
+		// Set secClient to nil to trigger fallback logic below
+		secClient = nil
 	}
 
 	var payload *config.SecretPayload
@@ -134,8 +137,30 @@ func main() {
 		IdleTimeout:       60 * time.Second,
 	}
 
-	slog.Info("vitalcache server starting", "addr", srv.Addr)
-	if err := srv.ListenAndServe(); err != nil && err.Error() != "http: Server closed" {
-		slog.Error("server error", "err", err)
+	// Create a context that acts as a trap for OS signals
+	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
+	// Start server in a goroutine so it doesn't block the main thread
+	go func() {
+		slog.Info("vitalcache server starting", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("server error", "err", err)
+		}
+	}()
+
+	// Block until a signal is received
+	<-signalCtx.Done()
+	slog.Info("shutdown signal received, stopping server...")
+
+	// Create a timeout for graceful shutdown
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("server forced to shutdown", "err", err)
 	}
+
+	// Defers (tracing, kafka close) will execute here naturally
+	slog.Info("server exited properly")
 }

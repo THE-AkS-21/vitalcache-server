@@ -73,12 +73,12 @@ func (m *mockPrescriptionsService) ListByPatient(ctx context.Context, token stri
 }
 
 type mockMedicinesStore struct {
-	ListFunc func(ctx context.Context, limit, offset int) ([]domain.Medicine, error)
+	ListFunc func(ctx context.Context, token string, limit, offset int) ([]domain.Medicine, error)
 }
 
-func (m *mockMedicinesStore) List(ctx context.Context, limit, offset int) ([]domain.Medicine, error) {
+func (m *mockMedicinesStore) List(ctx context.Context, token string, limit, offset int) ([]domain.Medicine, error) {
 	if m.ListFunc != nil {
-		return m.ListFunc(ctx, limit, offset)
+		return m.ListFunc(ctx, token, limit, offset)
 	}
 	return nil, errors.New("not implemented")
 }
@@ -167,7 +167,7 @@ func TestPatientPrescriptionHistory_InvalidID(t *testing.T) {
 func TestListMedicines_Success(t *testing.T) {
 	r := setupRouter()
 	mockStore := &mockMedicinesStore{
-		ListFunc: func(ctx context.Context, limit, offset int) ([]domain.Medicine, error) {
+		ListFunc: func(ctx context.Context, token string, limit, offset int) ([]domain.Medicine, error) {
 			return []domain.Medicine{{ID: 1, Name: "Paracetamol"}}, nil
 		},
 	}

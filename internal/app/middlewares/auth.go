@@ -36,17 +36,17 @@ func Auth(ks jwt.JWTKeySource) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired token"})
 			return
 		}
-		c.Set("user_id", userID)
+		c.Set(CtxUserID, userID)
 		if role, ok := claims["role"]; ok {
-			c.Set("user_role", role)
+			c.Set(CtxUserRole, role)
 		}
 		if designation, ok := claims["designation"]; ok {
-			c.Set("designation", designation)
+			c.Set(CtxDesignation, designation)
 		}
 		if doctorID, ok := claims["doctor_id"]; ok {
-			c.Set("doctor_id", doctorID)
+			c.Set(CtxDoctorID, doctorID)
 		}
-		c.Set("raw_token", parts[1])
+		c.Set(CtxRawToken, parts[1])
 		c.Next()
 	}
 }
