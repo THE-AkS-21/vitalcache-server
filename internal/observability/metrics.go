@@ -6,44 +6,44 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 )
 
 var (
-	httpReqs = prometheus.NewCounterVec(
+	HttpRequestsTotal = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Namespace: "vitalcache",
-			Subsystem: "http",
-			Name:      "requests_total",
-			Help:      "Total HTTP requests",
+			Name: "http_requests_total",
+			Help: "Total number of HTTP requests",
 		},
 		[]string{"method", "path", "status"},
 	)
-	httpLatency = prometheus.NewHistogramVec(
+
+	HttpRequestDuration = promauto.NewHistogramVec(
 		prometheus.HistogramOpts{
-			Namespace: "vitalcache",
-			Subsystem: "http",
-			Name:      "latency_seconds",
-			Help:      "HTTP request latency",
-			Buckets:   prometheus.DefBuckets,
+			Name:    "http_request_duration_seconds",
+			Help:    "Duration of HTTP requests in seconds",
+			Buckets: []float64{0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10},
 		},
 		[]string{"method", "path"},
 	)
 )
 
-func InitMetrics() {
-	prometheus.MustRegister(httpReqs, httpLatency)
-}
-
+// MetricsMiddleware records RED metrics for Prometheus
 func MetricsMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		start := time.Now()
 		c.Next()
-		lat := time.Since(start).Seconds()
+
+		// Get registered route path (e.g., /api/v1/users/:id) instead of raw URL
 		path := c.FullPath()
 		if path == "" {
-			path = c.Request.URL.Path // fallback for unmatched routes
+			path = "unknown_route"
 		}
-		httpLatency.WithLabelValues(c.Request.Method, path).Observe(lat)
-		httpReqs.WithLabelValues(c.Request.Method, path, strconv.Itoa(c.Writer.Status())).Inc()
+
+		duration := time.Since(start).Seconds()
+		status := strconv.Itoa(c.Writer.Status())
+
+		HttpRequestsTotal.WithLabelValues(c.Request.Method, path, status).Inc()
+		HttpRequestDuration.WithLabelValues(c.Request.Method, path).Observe(duration)
 	}
 }

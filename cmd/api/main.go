@@ -2,165 +2,113 @@ package main
 
 import (
 	"context"
-	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/THE-AkS-21/vitalcache-server/internal/app"
-	"github.com/THE-AkS-21/vitalcache-server/internal/infra/kafka"
-	"github.com/THE-AkS-21/vitalcache-server/internal/infra/redis"
-	"github.com/THE-AkS-21/vitalcache-server/internal/observability"
-	"github.com/THE-AkS-21/vitalcache-server/internal/queue"
-	"github.com/THE-AkS-21/vitalcache-server/internal/store/supabase"
-	"github.com/THE-AkS-21/vitalcache-server/internal/workers"
+	"github.com/gin-gonic/gin"
+
+	// FIX: Corrected config import path
 	"github.com/THE-AkS-21/vitalcache-server/pkg/config"
-	"github.com/THE-AkS-21/vitalcache-server/pkg/jwt"
-	"github.com/joho/godotenv"
+
+	// Core Packages
+	"github.com/THE-AkS-21/vitalcache-server/internal/observability"
+	"github.com/THE-AkS-21/vitalcache-server/internal/pkg/cache"
+	"github.com/THE-AkS-21/vitalcache-server/internal/pkg/db"
+	"github.com/THE-AkS-21/vitalcache-server/internal/pkg/logger"
+	"github.com/THE-AkS-21/vitalcache-server/internal/pkg/middleware"
+
+	// Domain Modules
+	"github.com/THE-AkS-21/vitalcache-server/internal/appointments"
+	"github.com/THE-AkS-21/vitalcache-server/internal/auth"
+	"github.com/THE-AkS-21/vitalcache-server/internal/doctors"
+	"github.com/THE-AkS-21/vitalcache-server/internal/medicines"
+	"github.com/THE-AkS-21/vitalcache-server/internal/patients"
+	"github.com/THE-AkS-21/vitalcache-server/internal/prescriptions"
 )
 
 func main() {
-	observability.InitLogger()
-	_ = godotenv.Load() // load .env early
+	cfg := config.Load()
+	log := logger.New(cfg.LogLevel)
+	defer log.Sync()
 
-	ctx := context.Background()
+	log.Info("Starting VitalCache Server (Modular Monolith)...")
 
-	// 1) Try AWS secrets; if not configured, fall back to .env
-	secClient, err := config.NewSecretsClient(ctx)
-	if err != nil {
-		slog.Warn("aws secrets init failed, falling back to .env", "err", err)
-		// Set secClient to nil to trigger fallback logic below
-		secClient = nil
-	}
-
-	var payload *config.SecretPayload
-	var putFunc func(context.Context, *config.SecretPayload) error
-
-	if secClient != nil {
-		var ver string
-		payload, ver, err = secClient.Get(ctx)
-		if err != nil {
-			slog.Error("get secrets failed", "err", err)
-			os.Exit(1)
-		}
-		slog.Info("loaded secrets from AWS", "version", ver)
-		putFunc = secClient.Put
-	} else {
-		// Local fallback: read Supabase creds from env, use a dev keyring
-		url := os.Getenv("SUPABASE_URL")
-		key := os.Getenv("SUPABASE_KEY")
-		if url == "" || key == "" {
-			slog.Error("missing SUPABASE_URL or SUPABASE_KEY in .env for local fallback")
-			os.Exit(1)
-		}
-		payload = &config.SecretPayload{
-			SupabaseURL: url,
-			SupabaseKey: key,
-			JWTKeyring:  config.NewLocalKeyring(),
-		}
-		// No-op put function in dev
-		putFunc = func(context.Context, *config.SecretPayload) error { return nil }
-		slog.Warn("using local .env secrets (AWS disabled)")
-	}
-
-	// 2) Tracing + metrics
-	if err := observability.InitTracing(ctx); err != nil {
-		slog.Warn("tracing init failed", "err", err)
-	}
-	defer observability.ShutdownTracing(ctx)
-	observability.InitMetrics()
-
-	// 3) JWT keys + rotation (Rotation will no-op in local fallback)
-	keySrc, err := jwt.NewKeySource(payload, putFunc)
-	if err != nil {
-		slog.Error("jwt key source failed", "err", err)
-		os.Exit(1)
-	}
-	if err := jwt.RotateIfNeeded(ctx, keySrc); err != nil {
-		slog.Error("jwt rotate check failed", "err", err)
-	}
-	go func() {
-		t := time.NewTicker(24 * time.Hour)
-		defer t.Stop()
-		for range t.C {
-			if err := jwt.RotateIfNeeded(context.Background(), keySrc); err != nil {
-				slog.Error("daily jwt rotate failed", "err", err)
-			}
-		}
-	}()
-
-	// 4) DB client
-	db := supabase.NewClient(payload.SupabaseURL, payload.SupabaseKey)
-
-	// 5) Redis & Queue
-	rdb, err := redis.NewClient(ctx)
-	if err != nil {
-		slog.Warn("redis init failed, falling back to in-memory queue", "err", err)
-	}
-
-	var q queue.Client
-	if rdb != nil {
-		q = queue.NewRedisQueue(rdb.Client)
-	} else {
-		q = queue.NewInMemory()
-	}
-
-	go func() {
-		if err := q.StartWorker(ctx); err != nil {
-			slog.Error("queue worker stopped", "err", err)
-		}
-	}()
-
-	// Start Email Worker (Stubbed)
-	emailWorker := workers.NewEmailWorker(q)
-	emailWorker.Start(ctx)
-
-	// 6) Kafka
-	kp, err := kafka.NewProducer()
-	if err != nil {
-		slog.Warn("kafka init failed", "err", err)
-	}
-	if kp != nil {
-		defer kp.Close()
-	}
-
-	// 7) HTTP server
-	r := app.NewServer(db, keySrc, payload, q, rdb, kp)
-	srv := &http.Server{
-		Addr:              ":8080",
-		Handler:           r,
-		ReadHeaderTimeout: 5 * time.Second,
-		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      15 * time.Second,
-		IdleTimeout:       60 * time.Second,
-	}
-
-	// Create a context that acts as a trap for OS signals
-	signalCtx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer stop()
-
-	// Start server in a goroutine so it doesn't block the main thread
-	go func() {
-		slog.Info("vitalcache server starting", "addr", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			slog.Error("server error", "err", err)
-		}
-	}()
-
-	// Block until a signal is received
-	<-signalCtx.Done()
-	slog.Info("shutdown signal received, stopping server...")
-
-	// Create a timeout for graceful shutdown
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if err := srv.Shutdown(shutdownCtx); err != nil {
-		slog.Error("server forced to shutdown", "err", err)
+	observability.InitTracer(cfg)
+	observability.InitMetrics()
+
+	pgPool, err := db.NewPostgresPool(ctx, cfg.PostgresURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to PostgreSQL: %v", err)
+	}
+	defer pgPool.Close()
+
+	mongoClient, err := db.NewMongoClient(ctx, cfg.MongoURI)
+	if err != nil {
+		log.Fatalf("Failed to connect to MongoDB: %v", err)
+	}
+	defer mongoClient.Disconnect(context.Background())
+
+	redisClient, err := cache.NewRedisClient(ctx, cfg.RedisURL)
+	if err != nil {
+		log.Fatalf("Failed to connect to Redis: %v", err)
+	}
+	defer redisClient.Close()
+
+	if cfg.Env == "production" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+	router := gin.New()
+
+	// Ensure these middleware functions exist in internal/pkg/middleware/
+	// (You created them in previous steps)
+	router.Use(middleware.Recovery(log))
+	router.Use(middleware.RequestID())
+	router.Use(middleware.Logger(log))
+	router.Use(middleware.CORS(cfg.FrontendURL))
+	router.Use(observability.MetricsMiddleware())
+
+	v1 := router.Group("/api/v1")
+
+	auth.RegisterRoutes(v1, pgPool, redisClient, cfg, log)
+	doctors.RegisterRoutes(v1, pgPool, log)
+	patients.RegisterRoutes(v1, pgPool, mongoClient, log)
+	appointments.RegisterRoutes(v1, pgPool, redisClient, log)
+	medicines.RegisterRoutes(v1, mongoClient, redisClient, log)
+	prescriptions.RegisterRoutes(v1, mongoClient, redisClient, log)
+
+	router.GET("/healthz", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "healthy", "postgres": "up", "mongo": "up", "redis": "up"})
+	})
+
+	srv := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: router,
 	}
 
-	// Defers (tracing, kafka close) will execute here naturally
-	slog.Info("server exited properly")
+	go func() {
+		log.Infof("Server listening on port %s", cfg.Port)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("listen: %s\n", err)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	<-quit
+	log.Info("Shutdown signal received, gracefully terminating...")
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		log.Fatalf("Server forced to shutdown: %v", err)
+	}
+
+	log.Info("Server exiting gracefully")
 }

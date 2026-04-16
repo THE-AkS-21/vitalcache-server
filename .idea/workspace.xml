@@ -5,64 +5,83 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="0b27bba8-5b37-4ea9-bd51-c4ef2575a0dc" name="Changes" comment="UPDATE">
-      <change afterPath="$PROJECT_DIR$/docs/API_REFERENCE.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/ARCHITECTURE.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/DATABASE_DESIGN.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/SECURITY_MODEL.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/SUMMARY.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/SYSTEM_FLOW.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/backend/AUTH_ENGINE.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/backend/JWT_KEY_ROTATION.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/backend/MIDDLEWARE.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/backend/QUEUE_JOBS.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/backend/README.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/backend/RLS_POLICIES.sql.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/backend/ROUTES.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/backend/SERVICES.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/export/vital_server_documentation.txt" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/frontend/API_CLIENT.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/frontend/AUTH_FLOW.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/frontend/OVERVIEW.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/frontend/README.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/ops/DEPLOYMENT.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/ops/DOCKER.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/ops/ENV_CONFIG.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/ops/OBSERVABILITY.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/docs/ops/README.md" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/internal/http/errors/errors.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/internal/http/handlers/helpers.go" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/pkg/config/local_keyring.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/cmd/server/main.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/internal/appointments/routes.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/internal/auth/profile_repo.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/internal/config/config.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/internal/doctors/routes.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/internal/medicines/routes.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/internal/patients/routes.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/internal/pkg/db/redis.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/internal/pkg/middleware/cors.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/internal/pkg/middleware/recovery.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/internal/pkg/middleware/requestid.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/internal/prescriptions/routes.go" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/internal/worker/processor.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/vitalcache-server.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/vitalcache-server.iml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/Dockerfile" beforeDir="false" afterPath="$PROJECT_DIR$/Dockerfile" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/cmd/api/main.go" beforeDir="false" afterPath="$PROJECT_DIR$/cmd/api/main.go" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/go.mod" beforeDir="false" afterPath="$PROJECT_DIR$/go.mod" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/go.sum" beforeDir="false" afterPath="$PROJECT_DIR$/go.sum" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/app/middlewares/auth.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/app/middlewares/auth.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/app/middlewares/authorize.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/app/middlewares/authorize.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/app/routes/routes.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/app/routes/routes.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/app/server.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/app/server.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/domain/prescriptions.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/domain/prescriptions.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/http/dto/auth.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/http/dto/auth.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/http/dto/patients.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/http/dto/patients.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/http/dto/prescriptions.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/http/dto/prescriptions.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/http/handlers/auth.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/http/handlers/auth.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/http/handlers/hdeps/deps.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/http/handlers/hdeps/deps.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/http/handlers/medicines.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/http/handlers/medicines.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/http/handlers/patients.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/http/handlers/patients.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/http/handlers/prescriptions.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/http/handlers/prescriptions.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/http/handlers/profiles.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/http/handlers/profiles.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/service/auth/service.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/service/auth/service.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/service/patients/service.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/service/patients/service.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/service/prescriptions/service.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/service/prescriptions/service.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/store/supabase/client.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/store/supabase/client.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/store/supabase/medicines_store.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/store/supabase/medicines_store.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/store/supabase/patients_store.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/store/supabase/patients_store.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/internal/store/supabase/prescriptions_store.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/store/supabase/prescriptions_store.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/app/middlewares/auth.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/app/middlewares/authorize.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/app/middlewares/logger.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/app/middlewares/ratelimit.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/app/middlewares/recovery.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/app/middlewares/requestid.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/app/routes/routes.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/app/server.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/domain/developers.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/domain/doctors.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/domain/hospital_staff.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/domain/medicines.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/domain/patients.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/domain/policies/ownership.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/domain/policies/rbac.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/domain/prescriptions.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/domain/users.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/http/dto/auth.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/http/dto/patients.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/http/dto/prescriptions.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/http/errors/errors.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/http/handlers/auth.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/http/handlers/handlers_test.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/http/handlers/hdeps/deps.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/http/handlers/helpers.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/http/handlers/medicines.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/http/handlers/patients.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/http/handlers/prescriptions.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/http/handlers/profiles.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/infra/kafka/producer.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/infra/redis/client.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/observability/metrics.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/observability/metrics.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/observability/tracing.go" beforeDir="false" afterPath="$PROJECT_DIR$/internal/observability/tracing.go" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/queue/inmem.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/queue/redis_queue.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/repo/users_repo.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/service/auth/service.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/service/patients/service.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/service/prescriptions/service.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/store/supabase/client.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/store/supabase/developers_store.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/store/supabase/doctors_store.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/store/supabase/hospital_staff_store.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/store/supabase/medicines_store.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/store/supabase/patients_store.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/store/supabase/prescriptions_store.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/store/supabase/users_store.go" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/internal/workers/email_worker.go" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/pkg/config/aws_secrets.go" beforeDir="false" afterPath="$PROJECT_DIR$/pkg/config/aws_secrets.go" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/pkg/jwt/jwt_tokens.go" beforeDir="false" afterPath="$PROJECT_DIR$/pkg/jwt/jwt_tokens.go" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
     <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="EmbeddingIndexingInfo">
+    <option name="cachedIndexableFilesCount" value="94" />
+    <option name="fileBasedEmbeddingIndicesEnabled" value="true" />
   </component>
   <component name="FileTemplateManagerImpl">
     <option name="RECENT_TEMPLATES">
@@ -73,7 +92,7 @@
       </list>
     </option>
   </component>
-  <component name="GOROOT" url="file:///opt/homebrew/Cellar/go/1.25.4/libexec" />
+  <component name="GOROOT" url="file:///opt/homebrew/opt/go/libexec" />
   <component name="Git.Settings">
     <option name="RECENT_BRANCH_BY_REPOSITORY">
       <map>
@@ -82,8 +101,12 @@
     </option>
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
+  <component name="McpProjectServerCommands">
+    <commands />
+    <urls />
+  </component>
   <component name="ProblemsViewState">
-    <option name="selectedTabId" value="ProjectErrors" />
+    <option name="selectedTabId" value="CurrentFile" />
   </component>
   <component name="ProjectColorInfo">{
   &quot;associatedIndex&quot;: 8
@@ -101,16 +124,20 @@
     &quot;ASKED_SHARE_PROJECT_CONFIGURATION_FILES&quot;: &quot;true&quot;,
     &quot;DefaultGoTemplateProperty&quot;: &quot;Go File&quot;,
     &quot;ModuleVcsDetector.initialDetectionPerformed&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.MCP Project settings loaded&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.TerminalTabsStorage.copyFrom.TerminalArrangementManager.252&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.go.analysis.ui.options.defaults&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.go.formatter.settings.were.checked&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.go.migrated.go.modules.settings&quot;: &quot;true&quot;,
     &quot;RunOnceActivity.go.modules.go.list.on.any.changes.was.set&quot;: &quot;true&quot;,
+    &quot;RunOnceActivity.typescript.service.memoryLimit.init&quot;: &quot;true&quot;,
+    &quot;codeWithMe.voiceChat.enabledByDefault&quot;: &quot;false&quot;,
     &quot;git-widget-placeholder&quot;: &quot;store-api&quot;,
     &quot;go.import.settings.migrated&quot;: &quot;true&quot;,
     &quot;go.sdk.automatically.set&quot;: &quot;true&quot;,
-    &quot;last_opened_file_path&quot;: &quot;/Users/ankitsingh/Desktop/projects/vitalcache-server&quot;,
+    &quot;last_opened_file_path&quot;: &quot;/Users/ankitsingh&quot;,
     &quot;node.js.detected.package.eslint&quot;: &quot;true&quot;,
     &quot;node.js.selected.package.eslint&quot;: &quot;(autodetect)&quot;,
     &quot;nodejs_package_manager_path&quot;: &quot;npm&quot;,
@@ -132,8 +159,8 @@
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-gosdk-f466f9b0953e-146d08934cbf-org.jetbrains.plugins.go.sharedIndexes.bundled-GO-252.26830.102" />
-        <option value="bundled-js-predefined-d6986cc7102b-3aa1da707db6-JavaScript-GO-252.26830.102" />
+        <option value="bundled-gosdk-72a9cf600ed8-3105c3b11fe0-org.jetbrains.plugins.go.sharedIndexes.bundled-GO-261.22158.291" />
+        <option value="bundled-js-predefined-d6986cc7102b-3bd3a6803838-JavaScript-GO-261.22158.291" />
       </set>
     </attachedChunks>
   </component>
@@ -169,8 +196,5 @@
     <MESSAGE value="Store Working" />
     <MESSAGE value="UPDATE" />
     <option name="LAST_COMMIT_MESSAGE" value="UPDATE" />
-  </component>
-  <component name="VgoProject">
-    <settings-migrated>true</settings-migrated>
   </component>
 </project>

@@ -20,9 +20,17 @@ type Keyring struct {
 }
 
 type SecretPayload struct {
-	SupabaseURL string  `json:"SUPABASE_URL"`
-	SupabaseKey string  `json:"SUPABASE_KEY"`
-	JWTKeyring  Keyring `json:"JWT_KEYRING"`
+	// Legacy Supabase HTTP client credentials (used during transition).
+	// Will be removed once all stores are migrated to pgx/mongo-driver.
+	SupabaseURL string `json:"SUPABASE_URL"`
+	SupabaseKey string `json:"SUPABASE_KEY"`
+
+	// PostgresDSN is the full Supabase connection URL for pgx.
+	// Format: postgresql://postgres:[pw]@db.[ref].supabase.co:5432/postgres
+	// Leave empty to fall back to the POSTGRES_DSN environment variable.
+	PostgresDSN string `json:"POSTGRES_DSN,omitempty"`
+
+	JWTKeyring Keyring `json:"JWT_KEYRING"`
 }
 
 type SecretsClient struct {
