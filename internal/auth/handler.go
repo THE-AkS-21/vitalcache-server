@@ -17,7 +17,7 @@ import (
 
 const (
 	refreshCookieName = "refresh_token"
-	refreshCookiePath = "/api/auth"
+	refreshCookiePath = "/"
 	defaultRefreshTTL = 7 * 24 * time.Hour
 )
 
