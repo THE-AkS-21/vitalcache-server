@@ -33,19 +33,14 @@ func (s *service) CreatePrescription(ctx context.Context, doctorID string, req C
 		UpdatedAt:      time.Now(),
 	}
 
-	if err := s.repo.Create(ctx, p); err != nil {
+	jobData := map[string]string{"prescription_id": p.PrescriptionID, "patient_id": p.PatientID}
+	payloadBytes, _ := json.Marshal(jobData)
+	job := map[string]string{"type": "generate_pdf", "payload": string(payloadBytes)}
+	jobBytes, _ := json.Marshal(job)
+
+	if err := s.repo.CreateWithOutbox(ctx, p, jobBytes); err != nil {
 		return nil, apperr.Internal(err)
 	}
-
-	go func() {
-		jobData := map[string]string{"prescription_id": p.PrescriptionID, "patient_id": p.PatientID}
-		payloadBytes, _ := json.Marshal(jobData)
-
-		job := map[string]string{"type": "generate_pdf", "payload": string(payloadBytes)}
-		jobBytes, _ := json.Marshal(job)
-
-		s.rdb.RPush(context.Background(), "vitalcache:jobs", jobBytes)
-	}()
 
 	return p, nil
 }

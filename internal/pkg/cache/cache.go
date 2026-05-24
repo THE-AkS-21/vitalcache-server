@@ -21,6 +21,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
+	"golang.org/x/sync/singleflight"
 
 	"github.com/THE-AkS-21/vitalcache-server/internal/pkg/logger"
 )
@@ -37,11 +38,15 @@ const (
 type Cache struct {
 	rdb *redis.Client
 	log *zap.Logger
+	sfg singleflight.Group
 }
 
 // New returns a Cache backed by the provided Redis client.
 func New(rdb *redis.Client) *Cache {
-	return &Cache{rdb: rdb, log: logger.Named("cache")}
+	return &Cache{
+		rdb: rdb,
+		log: logger.Named("cache"),
+	}
 }
 
 // Get deserialises the cached value at key into dest.
@@ -68,19 +73,18 @@ func (c *Cache) Del(ctx context.Context, keys ...string) error {
 	return c.rdb.Del(ctx, keys...).Err()
 }
 
-// GetOrLoad implements cache-aside: returns the cached value if present,
-// otherwise calls loadFn, caches the result, and returns it.
+// GetOrLoad implements cache-aside using Generics and singleflight to prevent
+// Thundering Herd (cache stampedes).
 //
-//	var medicines []domain.Medicine
-//	err := cache.GetOrLoad(ctx, "medicines:page:0", cache.TTLMedicines,
-//	    func() (any, error) { return repo.ListMedicines(ctx, 20, 0) },
-//	    &medicines,
+//	medicines, err := cache.GetOrLoad(ctx, c, "medicines:page:0", cache.TTLMedicines,
+//	    func() ([]domain.Medicine, error) { return repo.ListMedicines(ctx, 20, 0) },
 //	)
-func (c *Cache) GetOrLoad(ctx context.Context, key string, ttl time.Duration, loadFn func() (any, error), dest any) error {
-	err := c.Get(ctx, key, dest)
+func GetOrLoad[T any](ctx context.Context, c *Cache, key string, ttl time.Duration, loadFn func() (T, error)) (T, error) {
+	var dest T
+	err := c.Get(ctx, key, &dest)
 	if err == nil {
 		c.log.Debug("cache hit", zap.String("key", key))
-		return nil
+		return dest, nil
 	}
 	if !errors.Is(err, redis.Nil) {
 		// Redis error — log and fall through to loadFn so the request still works.
@@ -89,25 +93,31 @@ func (c *Cache) GetOrLoad(ctx context.Context, key string, ttl time.Duration, lo
 		c.log.Debug("cache miss", zap.String("key", key))
 	}
 
-	val, loadErr := loadFn()
-	if loadErr != nil {
-		return loadErr
-	}
+	val, err, _ := c.sfg.Do(key, func() (interface{}, error) {
+		loadedVal, loadErr := loadFn()
+		if loadErr != nil {
+			return loadedVal, loadErr
+		}
 
-	// Re-serialise val into dest (double marshal is cheap vs a DB round-trip).
-	data, err := json.Marshal(val)
+		// Directly cache the value without double unmarshaling into a pointer
+		data, marshalErr := json.Marshal(loadedVal)
+		if marshalErr != nil {
+			return loadedVal, fmt.Errorf("cache.GetOrLoad marshal: %w", marshalErr)
+		}
+
+		// Best-effort write
+		if setErr := c.rdb.Set(ctx, key, data, ttl).Err(); setErr != nil {
+			c.log.Warn("cache set error", zap.String("key", key), zap.Error(setErr))
+		}
+		return loadedVal, nil
+	})
+
 	if err != nil {
-		return fmt.Errorf("cache.GetOrLoad marshal: %w", err)
-	}
-	if err := json.Unmarshal(data, dest); err != nil {
-		return fmt.Errorf("cache.GetOrLoad unmarshal: %w", err)
+		var zero T
+		return zero, err
 	}
 
-	// Best-effort write — don't fail the request if Redis is flaky.
-	if setErr := c.rdb.Set(ctx, key, data, ttl).Err(); setErr != nil {
-		c.log.Warn("cache set error", zap.String("key", key), zap.Error(setErr))
-	}
-	return nil
+	return val.(T), nil
 }
 
 // Invalidate removes one or more cache keys (e.g. after a write operation).

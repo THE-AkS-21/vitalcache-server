@@ -8,21 +8,21 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/THE-AkS-21/vitalcache-server/internal/pkg/middleware"
+	pkgjwt "github.com/THE-AkS-21/vitalcache-server/pkg/jwt"
 )
 
-func RegisterRoutes(router *gin.RouterGroup, db *pgxpool.Pool, rdb *redis.Client) {
+func RegisterRoutes(router *gin.RouterGroup, db *pgxpool.Pool, rdb *redis.Client, ks pkgjwt.JWTKeySource) {
 	repo := NewRepository(db)
 	svc := NewService(repo)
 	h := NewHandler(svc)
 
-	// Idempotency cached for 24 hours
 	idemMiddleware := middleware.Idempotency(rdb, 24*time.Hour)
 
-	// Create group. Auth middleware should be applied here or globally above this
-	appointmentsGroup := router.Group("/appointments")
+	g := router.Group("/appointments")
+	g.Use(middleware.Auth(ks))
 	{
-		// Idempotency applied ONLY to POST requests
-		appointmentsGroup.POST("/", idemMiddleware, h.Create)
-		appointmentsGroup.GET("/", h.List)
+		// Both doctors and staff can list/create appointments
+		g.GET("/", h.List)
+		g.POST("/", idemMiddleware, middleware.RequireRole("DOCTOR", "HOSPITAL_STAFF", "DEVELOPER"), h.Create)
 	}
 }

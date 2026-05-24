@@ -30,9 +30,11 @@ const (
 	StreamEmail         = "vitalcache:email"
 	StreamNotifications = "vitalcache:notifications"
 	StreamPrescriptions = "vitalcache:prescriptions"
+	StreamDLQ           = "vitalcache:dlq" // Dead Letter Queue for poison pills
 
 	workerBlockDuration = 5 * time.Second // XREADGROUP block timeout
-	maxRetryCount       = 3               // XPENDING re-delivery limit
+	claimIdleThreshold  = 1 * time.Minute // XAUTOCLAIM: reclaim messages idle this long
+	maxRetryCount       = 3               // delivery limit before routing to DLQ
 )
 
 // Message is a decoded stream entry.
@@ -116,6 +118,25 @@ func (q *RedisStreamQueue) Consume(ctx context.Context, stream, group, consumer 
 		default:
 		}
 
+		// ── XAUTOCLAIM sweep ─────────────────────────────────────────────────
+		// Re-claim messages that have been sitting idle in another consumer's PEL
+		// for longer than claimIdleThreshold. This recovers from crashed workers.
+		claimed, _, err := q.rdb.XAutoClaim(ctx, &redis.XAutoClaimArgs{
+			Stream:   stream,
+			Group:    group,
+			Consumer: consumer,
+			MinIdle:  claimIdleThreshold,
+			Start:    "0-0",
+			Count:    10,
+		}).Result()
+		if err != nil && err != redis.Nil {
+			q.log.Warn("XAUTOCLAIM error", zap.Error(err))
+		}
+		for _, msg := range claimed {
+			q.process(ctx, stream, group, msg, handler)
+		}
+
+		// ── Read new messages ────────────────────────────────────────────────
 		entries, err := q.rdb.XReadGroup(ctx, &redis.XReadGroupArgs{
 			Group:    group,
 			Consumer: consumer,
@@ -143,6 +164,9 @@ func (q *RedisStreamQueue) Consume(ctx context.Context, stream, group, consumer 
 }
 
 // process handles a single stream message and ACKs/NACKs accordingly.
+// On handler error it checks the delivery count via XPENDING. If the message
+// has been delivered >= maxRetryCount times it is a poison pill: it gets
+// written to the DLQ stream and ACKed so the consumer can make forward progress.
 func (q *RedisStreamQueue) process(ctx context.Context, stream, group string, raw redis.XMessage, handler HandlerFunc) {
 	fields := make(map[string]string, len(raw.Values))
 	for k, v := range raw.Values {
@@ -158,8 +182,51 @@ func (q *RedisStreamQueue) process(ctx context.Context, stream, group string, ra
 			zap.String("stream", stream),
 			zap.Error(err),
 		)
-		// Leave the message in PEL (pending entry list) — it will be
-		// re-claimed by the next XAUTOCLAIM sweep.
+
+		// Check delivery count to detect poison pills.
+		pending, pendingErr := q.rdb.XPendingExt(ctx, &redis.XPendingExtArgs{
+			Stream: stream,
+			Group:  group,
+			Start:  raw.ID,
+			End:    raw.ID,
+			Count:  1,
+		}).Result()
+
+		if pendingErr == nil && len(pending) > 0 && pending[0].RetryCount >= int64(maxRetryCount) {
+			q.log.Error("poison pill detected — routing to DLQ",
+				zap.String("id", raw.ID),
+				zap.String("stream", stream),
+				zap.Int64("delivery_count", pending[0].RetryCount),
+			)
+			// Write to DLQ with original metadata preserved.
+			dlqValues := map[string]any{
+				"origin_stream":  stream,
+				"origin_id":      raw.ID,
+				"origin_group":   group,
+				"delivery_count": pending[0].RetryCount,
+				"last_error":     err.Error(),
+			}
+			for k, v := range fields {
+				dlqValues["payload_"+k] = v
+			}
+			if addErr := q.rdb.XAdd(ctx, &redis.XAddArgs{
+				Stream: StreamDLQ,
+				MaxLen: 5_000,
+				Approx: true,
+				Values: dlqValues,
+			}).Err(); addErr != nil {
+				q.log.Error("failed to write to DLQ", zap.Error(addErr))
+				// Do NOT ACK — leave in PEL to try again rather than silently losing it.
+				return
+			}
+			// ACK the original so the group can make forward progress.
+			if ackErr := q.rdb.XAck(ctx, stream, group, raw.ID).Err(); ackErr != nil {
+				q.log.Warn("XACK error after DLQ route", zap.String("id", raw.ID), zap.Error(ackErr))
+			}
+			return
+		}
+
+		// Under retry threshold — leave in PEL for re-delivery.
 		return
 	}
 

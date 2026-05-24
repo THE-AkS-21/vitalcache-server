@@ -3,6 +3,7 @@ package prescriptions
 import (
 	"context"
 	"errors"
+	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -11,12 +12,16 @@ import (
 )
 
 type mongoRepo struct {
-	coll *mongo.Collection
+	coll       *mongo.Collection
+	outboxColl *mongo.Collection
+	client     *mongo.Client
 }
 
 func NewRepository(db *mongo.Database) Repository {
 	return &mongoRepo{
-		coll: db.Collection("prescriptions"),
+		coll:       db.Collection("prescriptions"),
+		outboxColl: db.Collection("outbox"),
+		client:     db.Client(),
 	}
 }
 
@@ -26,6 +31,36 @@ func (r *mongoRepo) Create(ctx context.Context, p *Prescription) error {
 	p.UpdatedAt = p.CreatedAt
 
 	_, err := r.coll.InsertOne(ctx, p)
+	return err
+}
+
+func (r *mongoRepo) CreateWithOutbox(ctx context.Context, p *Prescription, jobBytes []byte) error {
+	p.ID = primitive.NewObjectID()
+	p.CreatedAt = primitive.NewDateTimeFromTime(p.CreatedAt).Time()
+	p.UpdatedAt = p.CreatedAt
+
+	session, err := r.client.StartSession()
+	if err != nil {
+		return err // Fallback or fail
+	}
+	defer session.EndSession(ctx)
+
+	_, err = session.WithTransaction(ctx, func(sessCtx mongo.SessionContext) (interface{}, error) {
+		if _, err := r.coll.InsertOne(sessCtx, p); err != nil {
+			return nil, err
+		}
+
+		outboxEvent := bson.M{
+			"type":       "vitalcache:jobs",
+			"payload":    string(jobBytes),
+			"created_at": primitive.NewDateTimeFromTime(time.Now()).Time(),
+			"status":     "PENDING",
+		}
+		if _, err := r.outboxColl.InsertOne(sessCtx, outboxEvent); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	})
 	return err
 }
 

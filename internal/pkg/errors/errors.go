@@ -42,6 +42,15 @@ func Conflict(message string, err error) *AppError {
 	return &AppError{Code: "CONFLICT", Message: message, Err: err}
 }
 
+func Forbidden(message string) *AppError {
+	return &AppError{Code: "FORBIDDEN", Message: message}
+}
+
+func NotFound(resource string, err error) *AppError {
+	msg := resource + " not found"
+	return &AppError{Code: "RESOURCE_NOT_FOUND", Message: msg, Err: err}
+}
+
 // --- HTTP Responders ---
 
 // Abort standardizes error JSON responses across the app
@@ -80,5 +89,21 @@ func Abort(c *gin.Context, err error) {
 
 // WriteOK standardizes successful JSON responses
 func WriteOK(c *gin.Context, status int, data any) {
-	c.JSON(status, data)
+	c.JSON(status, gin.H{"success": true, "data": data})
+}
+
+// PaginationMeta is the standard pagination envelope.
+type PaginationMeta struct {
+	Limit  int   `json:"limit"`
+	Offset int   `json:"offset"`
+	Total  int64 `json:"total"`
+}
+
+// WritePaginated sends a standardized paginated list response.
+func WritePaginated(c *gin.Context, status int, data any, meta PaginationMeta) {
+	c.JSON(status, gin.H{
+		"success": true,
+		"data":    data,
+		"meta":    meta,
+	})
 }

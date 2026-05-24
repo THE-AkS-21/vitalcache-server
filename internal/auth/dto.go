@@ -17,10 +17,14 @@ type LoginRequest struct {
 	Password string `json:"password" validate:"required"`
 }
 
+// LoginResponse is the JSON body returned for both /login and /refresh.
+// ❌ NO refresh_token field — it is delivered exclusively via HttpOnly cookie.
 type LoginResponse struct {
-	AccessToken string `json:"accessToken"`
+	AccessToken string `json:"access_token"`
 }
 
+// RefreshRequest kept for backward compat with non-browser clients (CLI tools, mobile).
+// The handler prefers the cookie; this is a fallback only.
 type RefreshRequest struct {
-	RefreshToken string `json:"refreshToken"`
+	RefreshToken string `json:"refresh_token"`
 }

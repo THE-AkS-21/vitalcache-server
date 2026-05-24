@@ -8,8 +8,6 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/THE-AkS-21/vitalcache-server/internal/doctors"
 )
 
 // PgxDoctorRepo implements doctors.Repository against Supabase Postgres.
@@ -24,7 +22,7 @@ func New(pool *pgxpool.Pool) *PgxDoctorRepo {
 
 // GetByID fetches a single doctor by primary key.
 // Returns nil, nil if not found.
-func (r *PgxDoctorRepo) GetByID(ctx context.Context, id int64) (*doctors.Doctor, error) {
+func (r *PgxDoctorRepo) GetByID(ctx context.Context, id int64) (*Doctor, error) {
 	const q = `
 		SELECT d.id, d.user_id, u.name, d.designation, d.specialisation,
 		       d.registration_number, d.hospital_id, d.created_at
@@ -38,7 +36,7 @@ func (r *PgxDoctorRepo) GetByID(ctx context.Context, id int64) (*doctors.Doctor,
 }
 
 // GetByUserID fetches a doctor profile by the linked users.id (used post-login).
-func (r *PgxDoctorRepo) GetByUserID(ctx context.Context, userID int64) (*doctors.Doctor, error) {
+func (r *PgxDoctorRepo) GetByUserID(ctx context.Context, userID int64) (*Doctor, error) {
 	const q = `
 		SELECT d.id, d.user_id, u.name, d.designation, d.specialisation,
 		       d.registration_number, d.hospital_id, d.created_at
@@ -52,7 +50,7 @@ func (r *PgxDoctorRepo) GetByUserID(ctx context.Context, userID int64) (*doctors
 }
 
 // List returns a paginated list of all doctors ordered by name.
-func (r *PgxDoctorRepo) List(ctx context.Context, limit, offset int) ([]doctors.Doctor, int64, error) {
+func (r *PgxDoctorRepo) List(ctx context.Context, limit, offset int) ([]Doctor, int64, error) {
 	const q = `
 		SELECT d.id, d.user_id, u.name, d.designation, d.specialisation,
 		       d.registration_number, d.hospital_id, d.created_at,
@@ -69,11 +67,11 @@ func (r *PgxDoctorRepo) List(ctx context.Context, limit, offset int) ([]doctors.
 	defer rows.Close()
 
 	var (
-		result []doctors.Doctor
+		result []Doctor
 		total  int64
 	)
 	for rows.Next() {
-		var d doctors.Doctor
+		var d Doctor
 		if err := rows.Scan(
 			&d.ID, &d.UserID, &d.Name, &d.Designation, &d.Specialisation,
 			&d.RegistrationNumber, &d.HospitalID, &d.CreatedAt, &total,
@@ -87,8 +85,8 @@ func (r *PgxDoctorRepo) List(ctx context.Context, limit, offset int) ([]doctors.
 
 // ─────────────────────────────────────────────────────────────────────────────
 
-func scanDoctor(row pgx.Row) (*doctors.Doctor, error) {
-	var d doctors.Doctor
+func scanDoctor(row pgx.Row) (*Doctor, error) {
+	var d Doctor
 	err := row.Scan(
 		&d.ID, &d.UserID, &d.Name, &d.Designation, &d.Specialisation,
 		&d.RegistrationNumber, &d.HospitalID, &d.CreatedAt,

@@ -38,6 +38,7 @@ type CreatePrescriptionReq struct {
 
 type Repository interface {
 	Create(ctx context.Context, p *Prescription) error
+	CreateWithOutbox(ctx context.Context, p *Prescription, jobBytes []byte) error
 	GetByID(ctx context.Context, id primitive.ObjectID) (*Prescription, error)
 	ListByPatient(ctx context.Context, patientID string, limit, offset int) ([]Prescription, int64, error)
 }

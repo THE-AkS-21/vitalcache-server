@@ -97,9 +97,3 @@ func (h *Handler) GetByID(c *gin.Context) {
 	}
 	apperr.WriteOK(c, http.StatusOK, d)
 }
-
-// RegisterRoutes mounts doctor endpoints.
-func RegisterRoutes(rg *gin.RouterGroup, h *Handler) {
-	rg.GET("", h.List)
-	rg.GET("/:id", h.GetByID)
-}

@@ -16,6 +16,7 @@ import (
 	"github.com/THE-AkS-21/vitalcache-server/internal/observability"
 	"github.com/THE-AkS-21/vitalcache-server/internal/patients"
 	"github.com/THE-AkS-21/vitalcache-server/internal/pkg/db"
+	"github.com/THE-AkS-21/vitalcache-server/internal/prescriptions"
 )
 
 func main() {
@@ -72,11 +73,16 @@ func main() {
 
 	v1 := router.Group("/api/v1")
 
+	v1.GET("/", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "VitalCache API is online"})
+	})
+
 	// --- 4. Register Domains ---
-	auth.RegisterRoutes(v1, pgPool, redisClient, cfg.JWTSecret)
-	appointments.RegisterRoutes(v1, pgPool, redisClient)
-	medicines.RegisterRoutes(v1, mongoClient, redisClient)
-	patients.RegisterRoutes(v1, pgPool)
+	ks := auth.RegisterRoutes(v1, pgPool, redisClient, cfg.JWTSecret)
+	appointments.RegisterRoutes(v1, pgPool, redisClient, ks)
+	medicines.RegisterRoutes(v1, mongoClient, redisClient, ks)
+	patients.RegisterRoutes(v1, pgPool, ks)
+	prescriptions.RegisterRoutes(v1, mongoClient, redisClient, ks)
 
 	// --- 5. Start Server ---
 	log.Printf("Server starting on port %s", cfg.Port)

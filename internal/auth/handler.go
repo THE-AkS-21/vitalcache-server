@@ -75,7 +75,7 @@ func (h *Handler) Login(c *gin.Context) {
 	}
 
 	// Deliver refresh token as an httpOnly cookie.
-	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie(
 		refreshCookieName,
 		pair.RefreshToken,
@@ -113,7 +113,7 @@ func (h *Handler) Refresh(c *gin.Context) {
 	}
 
 	// Rotate cookie.
-	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie(
 		refreshCookieName,
 		pair.RefreshToken,
@@ -136,7 +136,7 @@ func (h *Handler) Logout(c *gin.Context) {
 	h.svc.Logout(c.Request.Context(), rt)
 
 	// Clear the cookie regardless of whether the token was valid.
-	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetSameSite(http.SameSiteStrictMode)
 	c.SetCookie(
 		refreshCookieName,
 		"",

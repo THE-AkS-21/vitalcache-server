@@ -12,7 +12,6 @@
 package middleware
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -20,6 +19,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
+	"golang.org/x/time/rate"
 
 	apperr "github.com/THE-AkS-21/vitalcache-server/internal/pkg/errors"
 )
@@ -67,6 +67,11 @@ func RateLimiter(group string, rpm int, rdb *redis.Client) gin.HandlerFunc {
 	windowMs := windowDur.Milliseconds()
 	limit := int64(rpm)
 
+	// Circuit Breaker / Fallback: Global in-memory token bucket if Redis goes down.
+	// We convert RPM to rate.Limit (requests per second) and use rpm as burst size.
+	fallbackRate := rate.Limit(float64(rpm) / 60.0)
+	fallbackLimiter := rate.NewLimiter(fallbackRate, rpm)
+
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 		key := fmt.Sprintf("rl:%s:%s", group, ip)
@@ -74,7 +79,7 @@ func RateLimiter(group string, rpm int, rdb *redis.Client) gin.HandlerFunc {
 		windowStart := now - windowMs
 
 		result, err := slidingWindowScript.Run(
-			context.Background(),
+			c.Request.Context(),
 			rdb,
 			[]string{key},
 			strconv.FormatInt(windowStart, 10),
@@ -84,8 +89,13 @@ func RateLimiter(group string, rpm int, rdb *redis.Client) gin.HandlerFunc {
 		).Int()
 
 		if err != nil {
-			// Redis failure — fail open (allow the request) to avoid hard outage.
-			// In production, alert on redis errors separately via metrics.
+			// Redis failure — fallback to strict in-memory global token bucket limiter
+			// to protect the database from an attack masking as a Redis outage.
+			if !fallbackLimiter.Allow() {
+				c.Header("Retry-After", "5")
+				apperr.Abort(c, apperr.New("RATE_LIMIT_EXCEEDED", "Too many requests. Please try again later."))
+				return
+			}
 			c.Next()
 			return
 		}

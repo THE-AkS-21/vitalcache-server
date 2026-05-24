@@ -8,12 +8,12 @@ import (
 	"fmt"
 	"time"
 
-	"go.mongodb.org/mongo-driver/v2/bson"
-	"go.mongodb.org/mongo-driver/v2/mongo"
-	"go.mongodb.org/mongo-driver/v2/mongo/options"
+	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
+	"go.mongodb.org/mongo-driver/mongo/options"
 	"go.uber.org/zap"
 
-	"github.com/THE-AkS-21/vitalcache-server/internal/pkg/db"
 	"github.com/THE-AkS-21/vitalcache-server/internal/pkg/logger"
 )
 
@@ -30,7 +30,7 @@ const (
 
 // Event is an immutable timeline entry for a patient's clinical history.
 type Event struct {
-	ID          bson.ObjectID          `bson:"_id,omitempty" json:"id"`
+	ID          primitive.ObjectID     `bson:"_id,omitempty" json:"id"`
 	PatientID   int64                  `bson:"patient_id"    json:"patient_id"`
 	DoctorID    int64                  `bson:"doctor_id"     json:"doctor_id"`
 	Type        EventType              `bson:"type"          json:"type"`
@@ -59,16 +59,17 @@ type MongoHistoryRepo struct {
 }
 
 // NewMongoHistoryRepo returns a production-ready history repository.
-func NewMongoHistoryRepo(mongoClient *db.MongoClient) *MongoHistoryRepo {
+// Pass the mongo database; the collection name is "patient_history".
+func NewMongoHistoryRepo(mongoClient *mongo.Client) *MongoHistoryRepo {
 	return &MongoHistoryRepo{
-		coll: mongoClient.Collection(db.CollPatientHistory),
+		coll: mongoClient.Database("vitalcache").Collection("patient_history"),
 		log:  logger.Named("history.repo"),
 	}
 }
 
 // Append inserts a new immutable event for a patient.
 func (r *MongoHistoryRepo) Append(ctx context.Context, e Event) (*Event, error) {
-	e.ID = bson.NewObjectID()
+	e.ID = primitive.NewObjectID()
 	e.CreatedAt = time.Now().UTC()
 
 	if _, err := r.coll.InsertOne(ctx, e); err != nil {

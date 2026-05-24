@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -11,7 +12,10 @@ import (
 	"github.com/THE-AkS-21/vitalcache-server/internal/pkg/logger"
 )
 
-const QueueName = "vitalcache:jobs"
+const (
+	QueueName           = "vitalcache:jobs"
+	ProcessingQueueName = "vitalcache:jobs:processing"
+)
 
 type Job struct {
 	Type    string `json:"type"`    // e.g., "generate_pdf", "send_email"
@@ -21,13 +25,19 @@ type Job struct {
 type Processor struct {
 	rdb *redis.Client
 	log *zap.Logger
+	wg  *sync.WaitGroup
 }
 
 func NewProcessor(rdb *redis.Client) *Processor {
 	return &Processor{
 		rdb: rdb,
 		log: logger.Named("worker"),
+		wg:  &sync.WaitGroup{},
 	}
+}
+
+func (p *Processor) Wait() {
+	p.wg.Wait()
 }
 
 func (p *Processor) Start(ctx context.Context) {
@@ -40,8 +50,8 @@ func (p *Processor) Start(ctx context.Context) {
 				p.log.Info("Shutting down worker...")
 				return
 			default:
-				// BLPOP blocks until an item is pushed to the queue, or 2s timeout
-				res, err := p.rdb.BLPop(ctx, 2*time.Second, QueueName).Result()
+				// BRPopLPush blocks and reliably moves the job to processing queue
+				res, err := p.rdb.BRPopLPush(ctx, QueueName, ProcessingQueueName, 2*time.Second).Result()
 				if err != nil {
 					if err != redis.Nil && err != context.Canceled {
 						p.log.Error("Redis pop error", zap.Error(err))
@@ -49,14 +59,20 @@ func (p *Processor) Start(ctx context.Context) {
 					continue
 				}
 
-				if len(res) == 2 {
+				if res != "" {
 					var job Job
-					if err := json.Unmarshal([]byte(res[1]), &job); err != nil {
+					if err := json.Unmarshal([]byte(res), &job); err != nil {
 						p.log.Error("Failed to parse job", zap.Error(err))
+						p.rdb.LRem(context.Background(), ProcessingQueueName, 1, res)
 						continue
 					}
 
-					p.processJob(job)
+					p.wg.Add(1)
+					go func(jobData string, parsedJob Job) {
+						defer p.wg.Done()
+						p.processJob(parsedJob)
+						p.rdb.LRem(context.Background(), ProcessingQueueName, 1, jobData)
+					}(res, job)
 				}
 			}
 		}

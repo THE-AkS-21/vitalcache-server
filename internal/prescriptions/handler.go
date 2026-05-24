@@ -28,10 +28,15 @@ func (h *Handler) Create(c *gin.Context) {
 		return
 	}
 
-	userID, _ := c.Get("user_id")
-	doctorID, ok := userID.(string)
-	if !ok {
-		apperr.Abort(c, apperr.Unauthorized("Invalid user ID in token"))
+	// ✅ Use doctor_id from JWT, not user_id — prescriptions must be scoped to the doctor entity.
+	doctorIDRaw, exists := c.Get("doctor_id")
+	if !exists {
+		apperr.Abort(c, apperr.Forbidden("only doctors can create prescriptions"))
+		return
+	}
+	doctorID, ok := doctorIDRaw.(string)
+	if !ok || doctorID == "" {
+		apperr.Abort(c, apperr.Forbidden("invalid doctor identity in token"))
 		return
 	}
 

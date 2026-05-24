@@ -42,9 +42,14 @@ func (r *pgxRepo) GetByID(ctx context.Context, id string) (*Appointment, error) 
 }
 
 func (r *pgxRepo) ListByDoctor(ctx context.Context, doctorID string, limit, offset int) ([]Appointment, int64, error) {
+	const countQ = `SELECT COUNT(id) FROM appointments WHERE doctor_id = $1`
+	var total int64
+	if err := r.db.QueryRow(ctx, countQ, doctorID).Scan(&total); err != nil {
+		return nil, 0, err
+	}
+
 	query := `
-		SELECT id, patient_id, doctor_id, hospital_id, appointment_time, status, created_at,
-		       COUNT(*) OVER() AS total
+		SELECT id, patient_id, doctor_id, hospital_id, appointment_time, status, created_at
 		FROM appointments WHERE doctor_id = $1
 		ORDER BY appointment_time DESC LIMIT $2 OFFSET $3
 	`
@@ -55,12 +60,11 @@ func (r *pgxRepo) ListByDoctor(ctx context.Context, doctorID string, limit, offs
 	defer rows.Close()
 
 	var result []Appointment
-	var total int64
 
 	for rows.Next() {
 		var a Appointment
 		if err := rows.Scan(
-			&a.ID, &a.PatientID, &a.DoctorID, &a.HospitalID, &a.AppointmentTime, &a.Status, &a.CreatedAt, &total,
+			&a.ID, &a.PatientID, &a.DoctorID, &a.HospitalID, &a.AppointmentTime, &a.Status, &a.CreatedAt,
 		); err != nil {
 			return nil, 0, err
 		}

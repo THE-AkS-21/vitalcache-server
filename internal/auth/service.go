@@ -64,14 +64,17 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) error {
 		Gender:       req.Gender,
 	}
 
-	if err := s.users.CreateUserTransaction(ctx, u, req.Role, req.Designation); err != nil {
+	// ✅ Self-registration is PATIENT-only.
+	// Role and Designation from the request body are intentionally ignored.
+	// Doctor/staff accounts are created through the admin invite flow.
+	if err := s.users.CreateUserTransaction(ctx, u, "PATIENT", "PATIENT"); err != nil {
 		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "already registered") {
 			return apperr.Conflict("email or phone number already registered", err)
 		}
 		return apperr.BadRequest(err.Error())
 	}
 
-	s.log.Info("user registered", zap.String("email", req.Email), zap.String("role", req.Role))
+	s.log.Info("user registered", zap.String("email", req.Email), zap.String("role", "PATIENT"))
 	return nil
 }
 

@@ -4,16 +4,22 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	"go.mongodb.org/mongo-driver/mongo"
+
+	"github.com/THE-AkS-21/vitalcache-server/internal/pkg/middleware"
+	pkgjwt "github.com/THE-AkS-21/vitalcache-server/pkg/jwt"
 )
 
-func RegisterRoutes(router *gin.RouterGroup, mongoClient *mongo.Client, rdb *redis.Client) {
+func RegisterRoutes(router *gin.RouterGroup, mongoClient *mongo.Client, rdb *redis.Client, ks pkgjwt.JWTKeySource) {
 	db := mongoClient.Database("vitalcache")
 	repo := NewRepository(db)
 	svc := NewService(repo)
 	h := NewHandler(svc, rdb)
 
-	medicinesGroup := router.Group("/medicines")
+	g := router.Group("/medicines")
+	g.Use(middleware.Auth(ks))
 	{
-		medicinesGroup.GET("/search", h.Search)
+		// Search is available to doctors (to add to prescriptions)
+		g.GET("/search", h.Search)
+		g.GET("/", h.Search) // alias for list
 	}
 }

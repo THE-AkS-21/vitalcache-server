@@ -39,35 +39,26 @@ func ValidateToken(token string, ks JWTKeySource) (uint, jwt.MapClaims, error) {
 	if err != nil {
 		return 0, nil, err
 	}
-	kid, _ := tok.Header["kid"].(string)
+	kid, ok := tok.Header["kid"].(string)
+	if !ok || kid == "" {
+		return 0, nil, errors.New("malformed token: missing kid")
+	}
+
 	keys := ks.AllKeys()
 
 	keyFunc := func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
 		}
-		if kid != "" {
-			if k, ok := keys[kid]; ok {
-				return k, nil
-			}
-			return nil, errors.New("kid not found")
+		if k, ok := keys[kid]; ok {
+			return k, nil
 		}
-		return nil, errors.New("no kid")
+		return nil, errors.New("kid not found")
 	}
-	// try with kid
+
 	tok, err = jwt.ParseWithClaims(token, jwt.MapClaims{}, keyFunc)
 	if err != nil {
-		// brute force legacy tokens (pre-kid)
-		var lastErr error
-		for _, k := range keys {
-			tok, lastErr = jwt.ParseWithClaims(token, jwt.MapClaims{}, func(_ *jwt.Token) (interface{}, error) { return k, nil })
-			if lastErr == nil && tok.Valid {
-				break
-			}
-		}
-		if lastErr != nil {
-			return 0, nil, lastErr
-		}
+		return 0, nil, err
 	}
 	if claims, ok := tok.Claims.(jwt.MapClaims); ok && tok.Valid {
 		switch v := claims["sub"].(type) {
