@@ -64,17 +64,114 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) error {
 		Gender:       req.Gender,
 	}
 
-	// ✅ Self-registration is PATIENT-only.
-	// Role and Designation from the request body are intentionally ignored.
-	// Doctor/staff accounts are created through the admin invite flow.
-	if err := s.users.CreateUserTransaction(ctx, u, "PATIENT", "PATIENT"); err != nil {
+	role := strings.ToUpper(req.Role)
+	if role != "PATIENT" && role != "DOCTOR" {
+		role = "PATIENT" // default fallback
+	}
+
+	var roleName, designationName string
+	if role == "DOCTOR" {
+		roleName = "Doctor"
+		designationName = req.Designation
+		if designationName == "" || designationName == "GENERAL_PHYSICIAN" || designationName == "DOCTOR" {
+			designationName = "General Physician" // sensible default
+		}
+	} else {
+		roleName = "Patient"
+		designationName = "Patient"
+	}
+
+	// Create user with the requested role
+	if err := s.users.CreateUserTransaction(ctx, u, roleName, designationName); err != nil {
 		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "already registered") {
 			return apperr.Conflict("email or phone number already registered", err)
 		}
 		return apperr.BadRequest(err.Error())
 	}
 
-	s.log.Info("user registered", zap.String("email", req.Email), zap.String("role", "PATIENT"))
+	s.log.Info("user registered", zap.String("email", req.Email), zap.String("role", role))
+	return nil
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Invite Flow
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (s *Service) GenerateInvite(ctx context.Context, req InviteRequest) (string, error) {
+	key, err := s.activeKey()
+	if err != nil {
+		return "", err
+	}
+
+	mapClaims := jwtv4.MapClaims{
+		"email":       strings.ToLower(strings.TrimSpace(req.Email)),
+		"role":        strings.ToUpper(req.Role),
+		"designation": req.Designation,
+		"exp":         time.Now().Add(24 * time.Hour).Unix(), // 24-hour expiry
+		"iat":         time.Now().Unix(),
+		"type":        "invite",
+	}
+
+	tok := jwtv4.NewWithClaims(jwtv4.SigningMethodHS256, mapClaims)
+	return tok.SignedString(key)
+}
+
+func (s *Service) AcceptInvite(ctx context.Context, req AcceptInviteRequest) error {
+	key, err := s.activeKey()
+	if err != nil {
+		return err
+	}
+
+	// 1. Verify and decode the invite token
+	token, err := jwtv4.Parse(req.Token, func(token *jwtv4.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwtv4.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+		return key, nil
+	})
+
+	if err != nil || !token.Valid {
+		return apperr.Unauthorized("invalid or expired invite link")
+	}
+
+	claims, ok := token.Claims.(jwtv4.MapClaims)
+	if !ok || claims["type"] != "invite" {
+		return apperr.Unauthorized("invalid token type")
+	}
+
+	email, _ := claims["email"].(string)
+	role, _ := claims["role"].(string)
+	designation, _ := claims["designation"].(string)
+
+	if email == "" || role == "" {
+		return apperr.BadRequest("invite token is missing required fields")
+	}
+
+	// 2. Hash password and prepare user
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return apperr.Internal(fmt.Errorf("hash password: %w", err))
+	}
+
+	u := &User{
+		Email:        email, // Email strictly from the token
+		PasswordHash: string(hash),
+		FirstName:    req.FirstName,
+		LastName:     req.LastName,
+		PhoneNumber:  req.PhoneNumber,
+		DateOfBirth:  req.DateOfBirth,
+		Gender:       req.Gender,
+	}
+
+	// 3. Create the user with the role guaranteed by the signed token
+	if err := s.users.CreateUserTransaction(ctx, u, role, designation); err != nil {
+		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "already registered") {
+			return apperr.Conflict("email is already registered", err)
+		}
+		return apperr.BadRequest(err.Error())
+	}
+
+	s.log.Info("user accepted invite", zap.String("email", email), zap.String("role", role))
 	return nil
 }
 

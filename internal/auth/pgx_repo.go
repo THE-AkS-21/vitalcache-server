@@ -25,7 +25,7 @@ func (r *pgxRepo) CreateUserTransaction(ctx context.Context, u *User, roleName, 
 
 	// 1. Get Role ID
 	var roleID string
-	err = tx.QueryRow(ctx, "SELECT id FROM roles WHERE name = $1", roleName).Scan(&roleID)
+	err = tx.QueryRow(ctx, "SELECT id FROM roles WHERE UPPER(name) = UPPER($1)", roleName).Scan(&roleID)
 	if err != nil {
 		return errors.New("invalid role specified")
 	}
@@ -33,7 +33,7 @@ func (r *pgxRepo) CreateUserTransaction(ctx context.Context, u *User, roleName, 
 	// 2. Get Designation ID (Fallback to a default if empty)
 	var designationID string
 	if designationName != "" {
-		err = tx.QueryRow(ctx, "SELECT id FROM designations WHERE name = $1 AND role_id = $2", designationName, roleID).Scan(&designationID)
+		err = tx.QueryRow(ctx, "SELECT id FROM designations WHERE UPPER(name) = UPPER($1) AND role_id = $2", designationName, roleID).Scan(&designationID)
 	} else {
 		err = tx.QueryRow(ctx, "SELECT id FROM designations WHERE role_id = $1 LIMIT 1", roleID).Scan(&designationID)
 	}
@@ -57,6 +57,19 @@ func (r *pgxRepo) CreateUserTransaction(ctx context.Context, u *User, roleName, 
 	_, err = tx.Exec(ctx, "INSERT INTO user_roles (user_id, role_id, designation_id) VALUES ($1, $2, $3)", u.ID, roleID, designationID)
 	if err != nil {
 		return err
+	}
+
+	// 5. Insert into specific profile tables based on role
+	if roleName == "Doctor" {
+		_, err = tx.Exec(ctx, "INSERT INTO doctors (user_id, specialization) VALUES ($1, $2)", u.ID, designationName)
+		if err != nil {
+			return err
+		}
+	} else if roleName == "Patient" {
+		_, err = tx.Exec(ctx, "INSERT INTO patients (user_id) VALUES ($1)", u.ID)
+		if err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit(ctx)

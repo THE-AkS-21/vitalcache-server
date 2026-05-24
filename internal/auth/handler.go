@@ -54,6 +54,59 @@ func (h *Handler) Register(c *gin.Context) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Invite Handlers
+// ─────────────────────────────────────────────────────────────────────────────
+
+// POST /api/auth/invites
+// Protected: Only Admin/Doctor should call this to generate an invite link.
+func (h *Handler) GenerateInvite(c *gin.Context) {
+	var req InviteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperr.Abort(c, apperr.BadRequest("invalid JSON: "+err.Error()))
+		return
+	}
+	if err := validator.Check(&req); err != nil {
+		apperr.Abort(c, err)
+		return
+	}
+
+	token, err := h.svc.GenerateInvite(c.Request.Context(), req)
+	if err != nil {
+		apperr.Abort(c, err)
+		return
+	}
+
+	// For now, return the token so the client can construct the link and copy it
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"invite_token": token,
+		},
+	})
+}
+
+// POST /api/auth/invites/accept
+// Public: The invited user submits their details + the token.
+func (h *Handler) AcceptInvite(c *gin.Context) {
+	var req AcceptInviteRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperr.Abort(c, apperr.BadRequest("invalid JSON: "+err.Error()))
+		return
+	}
+	if err := validator.Check(&req); err != nil {
+		apperr.Abort(c, err)
+		return
+	}
+
+	if err := h.svc.AcceptInvite(c.Request.Context(), req); err != nil {
+		apperr.Abort(c, err)
+		return
+	}
+
+	c.Status(http.StatusCreated)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/auth/login
 // ─────────────────────────────────────────────────────────────────────────────
 

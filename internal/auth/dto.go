@@ -28,3 +28,19 @@ type LoginResponse struct {
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
+
+type InviteRequest struct {
+	Email       string `json:"email" validate:"required,email"`
+	Role        string `json:"role" validate:"required"`
+	Designation string `json:"designation,omitempty"`
+}
+
+type AcceptInviteRequest struct {
+	Token       string  `json:"token" validate:"required"`
+	Password    string  `json:"password" validate:"required,min=8"`
+	FirstName   string  `json:"first_name" validate:"required,min=2"`
+	LastName    string  `json:"last_name" validate:"required,min=2"`
+	PhoneNumber *string `json:"phone_number,omitempty"`
+	DateOfBirth *string `json:"date_of_birth,omitempty"` // format: YYYY-MM-DD
+	Gender      *string `json:"gender,omitempty" validate:"omitempty,oneof=MALE FEMALE OTHER"`
+}

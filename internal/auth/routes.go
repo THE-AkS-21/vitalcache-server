@@ -35,9 +35,18 @@ func RegisterRoutes(router *gin.RouterGroup, db *pgxpool.Pool, rdb *redis.Client
 	authGroup := router.Group("/auth")
 	{
 		authGroup.POST("/login", h.Login)
-		authGroup.POST("/register", h.Register) // patient self-registration only
+		authGroup.POST("/register", h.Register) // temporary doctor + patient registration
 		authGroup.POST("/refresh", h.Refresh)
 		authGroup.POST("/logout", h.Logout)
+		authGroup.POST("/invites/accept", h.AcceptInvite) // public invite acceptance
+	}
+
+	// ── Protected auth routes ────────────────────────────────────────────────
+	authProtectedGroup := router.Group("/auth")
+	authProtectedGroup.Use(middleware.Auth(ks))
+	{
+		// Only Admins and Doctors can generate staff invites
+		authProtectedGroup.POST("/invites", middleware.RequireRole("ADMIN", "DOCTOR"), h.GenerateInvite)
 	}
 
 	// ── Protected profile route ───────────────────────────────────────────────
