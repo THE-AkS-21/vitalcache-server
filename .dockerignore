@@ -1,0 +1,9 @@
+.git
+.env*
+!.env.production
+README.md
+vendor/
+vitalcache-server
+*.exe
+*.test
+*.out
