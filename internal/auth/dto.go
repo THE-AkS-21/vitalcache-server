@@ -10,6 +10,7 @@ type RegisterRequest struct {
 	Gender      *string `json:"gender,omitempty" validate:"omitempty,oneof=MALE FEMALE OTHER"`
 	Role        string  `json:"role" validate:"required"` // e.g., "PATIENT", "DOCTOR"
 	Designation string  `json:"designation"`              // e.g., "GENERAL_PHYSICIAN"
+	InviteToken string  `json:"invite_token,omitempty"`
 }
 
 type LoginRequest struct {
@@ -43,4 +44,13 @@ type AcceptInviteRequest struct {
 	PhoneNumber *string `json:"phone_number,omitempty"`
 	DateOfBirth *string `json:"date_of_birth,omitempty"` // format: YYYY-MM-DD
 	Gender      *string `json:"gender,omitempty" validate:"omitempty,oneof=MALE FEMALE OTHER"`
+}
+
+type UpdatePasswordRequest struct {
+	OldPassword string `json:"old_password" validate:"required"`
+	NewPassword string `json:"new_password" validate:"required,min=8"`
+}
+
+type GoogleLoginRequest struct {
+	Token string `json:"token" validate:"required"`
 }

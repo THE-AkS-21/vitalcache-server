@@ -32,6 +32,20 @@ func GenerateToken(userID uint, role string, ks JWTKeySource, ttl time.Duration)
 	return t.SignedString(key)
 }
 
+func GenerateTokenWithCustomClaims(ks JWTKeySource, customClaims map[string]interface{}) (string, error) {
+	kid, key := ks.ActiveKey()
+	if len(key) == 0 {
+		return "", errors.New("no active key")
+	}
+	claims := jwt.MapClaims{}
+	for k, v := range customClaims {
+		claims[k] = v
+	}
+	t := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	t.Header["kid"] = kid
+	return t.SignedString(key)
+}
+
 func ValidateToken(token string, ks JWTKeySource) (uint, jwt.MapClaims, error) {
 	parser := &jwt.Parser{}
 	// peek KID

@@ -24,10 +24,14 @@ import (
 	// Domain Modules
 	"github.com/THE-AkS-21/vitalcache-server/internal/appointments"
 	"github.com/THE-AkS-21/vitalcache-server/internal/auth"
+	"github.com/THE-AkS-21/vitalcache-server/internal/billings"
 	"github.com/THE-AkS-21/vitalcache-server/internal/doctors"
+	"github.com/THE-AkS-21/vitalcache-server/internal/invites"
+	"github.com/THE-AkS-21/vitalcache-server/internal/medical_reports"
 	"github.com/THE-AkS-21/vitalcache-server/internal/medicines"
 	"github.com/THE-AkS-21/vitalcache-server/internal/patients"
 	"github.com/THE-AkS-21/vitalcache-server/internal/prescriptions"
+	"github.com/THE-AkS-21/vitalcache-server/internal/reports"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
@@ -81,6 +85,8 @@ func main() {
 
 	outboxPoller := worker.NewOutboxPoller(redisClient, mongoClient.Database("vitalcache"))
 	outboxPoller.Start(workerCtx)
+
+	worker.StartBillingAggregator(workerCtx, pgPool, logger.L().Sugar())
 
 	// --- 3. Router Setup ---
 	if cfg.Environment == "production" {
@@ -136,6 +142,10 @@ func main() {
 	appointments.RegisterRoutes(v1, pgPool, redisClient, ks)
 	medicines.RegisterRoutes(v1, mongoClient, redisClient, ks)
 	prescriptions.RegisterRoutes(v1, mongoClient, redisClient, ks)
+	reports.RegisterRoutes(v1, pgPool, ks)
+	medical_reports.RegisterRoutes(v1, mongoClient, ks)
+	billings.RegisterRoutes(v1, pgPool, ks)
+	invites.RegisterRoutes(v1, pgPool, ks)
 
 	v1.GET("/", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{"status": "VitalCache API is online"})

@@ -12,11 +12,13 @@ import (
 	"github.com/THE-AkS-21/vitalcache-server/internal/appointments"
 	"github.com/THE-AkS-21/vitalcache-server/internal/auth"
 	"github.com/THE-AkS-21/vitalcache-server/internal/config"
+	"github.com/THE-AkS-21/vitalcache-server/internal/medical_reports"
 	"github.com/THE-AkS-21/vitalcache-server/internal/medicines"
 	"github.com/THE-AkS-21/vitalcache-server/internal/observability"
 	"github.com/THE-AkS-21/vitalcache-server/internal/patients"
 	"github.com/THE-AkS-21/vitalcache-server/internal/pkg/db"
 	"github.com/THE-AkS-21/vitalcache-server/internal/prescriptions"
+	"github.com/THE-AkS-21/vitalcache-server/internal/reports"
 )
 
 func main() {
@@ -83,6 +85,8 @@ func main() {
 	medicines.RegisterRoutes(v1, mongoClient, redisClient, ks)
 	patients.RegisterRoutes(v1, pgPool, ks)
 	prescriptions.RegisterRoutes(v1, mongoClient, redisClient, ks)
+	reports.RegisterRoutes(v1, pgPool, ks)
+	medical_reports.RegisterRoutes(v1, mongoClient, ks)
 
 	// --- 5. Start Server ---
 	log.Printf("Server starting on port %s", cfg.Port)

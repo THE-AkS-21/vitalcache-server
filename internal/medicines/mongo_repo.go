@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.mongodb.org/mongo-driver/bson"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )
@@ -59,4 +60,15 @@ func (r *mongoRepo) Search(ctx context.Context, query string, limit, offset int)
 	}
 
 	return list, total, nil
+}
+
+func (r *mongoRepo) Create(ctx context.Context, p *Medicine) error {
+	res, err := r.coll.InsertOne(ctx, p)
+	if err != nil {
+		return err
+	}
+	if oid, ok := res.InsertedID.(primitive.ObjectID); ok {
+		p.ID = oid.Hex()
+	}
+	return nil
 }

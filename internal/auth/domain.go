@@ -34,9 +34,10 @@ type Profile struct {
 
 // --- Interfaces ---
 type UserRepository interface {
-	CreateUserTransaction(ctx context.Context, u *User, roleName, designationName string) error
+	CreateUserTransaction(ctx context.Context, u *User, roleName, designationName string, hospitalID *string) error
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	GetByID(ctx context.Context, id string) (*User, error)
+	UpdatePassword(ctx context.Context, id string, hash string) error
 }
 
 type ProfileRepository interface {
@@ -47,6 +48,7 @@ type ProfileRepository interface {
 type TokenPair struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
+	RefreshTTL   int    `json:"-"`
 }
 
 type Claims struct {

@@ -5,7 +5,6 @@ package auth
 import (
 	"net/http"
 	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -46,7 +45,20 @@ func (h *Handler) Register(c *gin.Context) {
 		return
 	}
 
-	if err := h.svc.Register(c.Request.Context(), req); err != nil {
+	var hospitalID *string
+
+	if req.InviteToken != "" {
+		// Just parse the unverified token to extract hospital_id and role
+		// We could fully verify it if we have the ks, but we don't have it in this handler directly.
+		// Alternatively, we pass InviteToken to the service and let it verify.
+		// Let's pass it to the service.
+	} else if req.Role == "DOCTOR" || req.Role == "STAFF" {
+		apperr.Abort(c, apperr.Forbidden("an invite token is required to register as a doctor or staff member"))
+		return
+	}
+
+	// Service signature will be updated to accept InviteToken
+	if err := h.svc.Register(c.Request.Context(), req, hospitalID); err != nil {
 		apperr.Abort(c, err)
 		return
 	}
@@ -68,6 +80,19 @@ func (h *Handler) GenerateInvite(c *gin.Context) {
 	if err := validator.Check(&req); err != nil {
 		apperr.Abort(c, err)
 		return
+	}
+
+	// Enforce Godfather restriction
+	if strings.EqualFold(req.Designation, "Godfather") {
+		designation, exists := c.Get("designation")
+		if !exists {
+			apperr.Abort(c, apperr.Forbidden("only Godfathers can invite other Godfathers"))
+			return
+		}
+		if desigStr, ok := designation.(string); !ok || !strings.EqualFold(desigStr, "Godfather") {
+			apperr.Abort(c, apperr.Forbidden("only Godfathers can invite other Godfathers"))
+			return
+		}
 	}
 
 	token, err := h.svc.GenerateInvite(c.Request.Context(), req)
@@ -107,6 +132,36 @@ func (h *Handler) AcceptInvite(c *gin.Context) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// PUT /api/v1/auth/password
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) UpdatePassword(c *gin.Context) {
+	userIDStr, ok := c.Get("user_id")
+	if !ok {
+		apperr.Abort(c, apperr.Unauthorized("user not authenticated"))
+		return
+	}
+	userID := userIDStr.(string)
+
+	var req UpdatePasswordRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperr.Abort(c, apperr.BadRequest("invalid JSON: "+err.Error()))
+		return
+	}
+	if err := validator.Check(&req); err != nil {
+		apperr.Abort(c, err)
+		return
+	}
+
+	if err := h.svc.UpdatePassword(c.Request.Context(), userID, req); err != nil {
+		apperr.Abort(c, err)
+		return
+	}
+
+	c.Status(http.StatusNoContent)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // POST /api/auth/login
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -132,11 +187,46 @@ func (h *Handler) Login(c *gin.Context) {
 	c.SetCookie(
 		refreshCookieName,
 		pair.RefreshToken,
-		int(refreshCookieTTL().Seconds()),
+		pair.RefreshTTL,
 		refreshCookiePath,
 		cookieDomain(),
 		secureFlag(),
 		true, // HttpOnly
+	)
+
+	apperr.WriteOK(c, http.StatusOK, LoginResponse{AccessToken: pair.AccessToken})
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/auth/google
+// ─────────────────────────────────────────────────────────────────────────────
+
+func (h *Handler) GoogleLogin(c *gin.Context) {
+	var req GoogleLoginRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperr.Abort(c, apperr.BadRequest("invalid JSON: "+err.Error()))
+		return
+	}
+	if err := validator.Check(&req); err != nil {
+		apperr.Abort(c, err)
+		return
+	}
+
+	pair, err := h.svc.GoogleLogin(c.Request.Context(), req)
+	if err != nil {
+		apperr.Abort(c, err)
+		return
+	}
+
+	c.SetSameSite(http.SameSiteStrictMode)
+	c.SetCookie(
+		refreshCookieName,
+		pair.RefreshToken,
+		pair.RefreshTTL,
+		refreshCookiePath,
+		cookieDomain(),
+		secureFlag(),
+		true,
 	)
 
 	apperr.WriteOK(c, http.StatusOK, LoginResponse{AccessToken: pair.AccessToken})
@@ -170,7 +260,7 @@ func (h *Handler) Refresh(c *gin.Context) {
 	c.SetCookie(
 		refreshCookieName,
 		pair.RefreshToken,
-		int(refreshCookieTTL().Seconds()),
+		pair.RefreshTTL,
 		refreshCookiePath,
 		cookieDomain(),
 		secureFlag(),
@@ -205,15 +295,6 @@ func (h *Handler) Logout(c *gin.Context) {
 // ─────────────────────────────────────────────────────────────────────────────
 // Cookie helpers
 // ─────────────────────────────────────────────────────────────────────────────
-
-func refreshCookieTTL() time.Duration {
-	if v := os.Getenv("REFRESH_TTL_DAYS"); v != "" {
-		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 180 {
-			return time.Duration(n) * 24 * time.Hour
-		}
-	}
-	return defaultRefreshTTL
-}
 
 func cookieDomain() string { return strings.TrimSpace(os.Getenv("COOKIE_DOMAIN")) }
 

@@ -86,8 +86,19 @@ func RequireRole(allowedRoles ...string) gin.HandlerFunc {
 			appErrors.Abort(c, appErrors.Forbidden("invalid role claim"))
 			return
 		}
+
+		// Universal access for GodFather designation
+		designation, existsDesig := c.Get(CtxDesignation)
+		if existsDesig {
+			if desigStr, ok := designation.(string); ok && strings.EqualFold(desigStr, "GodFather") {
+				c.Next()
+				return
+			}
+		}
+
+		// Check against allowed roles
 		for _, r := range allowedRoles {
-			if r == roleStr {
+			if strings.EqualFold(r, roleStr) {
 				c.Next()
 				return
 			}
@@ -117,5 +128,53 @@ func RequirePermission(permission string) gin.HandlerFunc {
 			}
 		}
 		appErrors.Abort(c, appErrors.Forbidden("missing required permission: "+permission))
+	}
+}
+
+// BlockRole enforces that the authenticated user does NOT have the specified role.
+// Used to prevent TESTER roles from making mutations (POST, PUT, PATCH, DELETE).
+// Note: GodFather designation bypasses this block.
+func BlockRole(blockedRole string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// GodFather designation bypasses all role blocks
+		designation, existsDesig := c.Get(CtxDesignation)
+		if existsDesig {
+			if desigStr, ok := designation.(string); ok && strings.EqualFold(desigStr, "GodFather") {
+				c.Next()
+				return
+			}
+		}
+		role, exists := c.Get(CtxRole)
+		if exists {
+			if roleStr, ok := role.(string); ok && strings.EqualFold(roleStr, blockedRole) {
+				appErrors.Abort(c, appErrors.Forbidden("this action is not allowed for your role"))
+				return
+			}
+		}
+		c.Next()
+	}
+}
+
+// RequireDesignation enforces that the authenticated user has a specific designation.
+// Used for GodFather-only endpoints (e.g., invite another GodFather).
+func RequireDesignation(allowedDesignations ...string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		designation, exists := c.Get(CtxDesignation)
+		if !exists {
+			appErrors.Abort(c, appErrors.Forbidden("designation not set in token"))
+			return
+		}
+		desigStr, ok := designation.(string)
+		if !ok {
+			appErrors.Abort(c, appErrors.Forbidden("invalid designation claim"))
+			return
+		}
+		for _, d := range allowedDesignations {
+			if strings.EqualFold(d, desigStr) {
+				c.Next()
+				return
+			}
+		}
+		appErrors.Abort(c, appErrors.Forbidden("insufficient designation privileges"))
 	}
 }

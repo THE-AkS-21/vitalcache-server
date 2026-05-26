@@ -16,7 +16,7 @@ func NewUserRepository(db *pgxpool.Pool) UserRepository {
 	return &pgxRepo{db: db}
 }
 
-func (r *pgxRepo) CreateUserTransaction(ctx context.Context, u *User, roleName, designationName string) error {
+func (r *pgxRepo) CreateUserTransaction(ctx context.Context, u *User, roleName, designationName string, hospitalID *string) error {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return err
@@ -61,12 +61,17 @@ func (r *pgxRepo) CreateUserTransaction(ctx context.Context, u *User, roleName, 
 
 	// 5. Insert into specific profile tables based on role
 	if roleName == "Doctor" {
-		_, err = tx.Exec(ctx, "INSERT INTO doctors (user_id, specialization) VALUES ($1, $2)", u.ID, designationName)
+		_, err = tx.Exec(ctx, "INSERT INTO doctors (user_id, specialization, hospital_id) VALUES ($1, $2, $3)", u.ID, designationName, hospitalID)
 		if err != nil {
 			return err
 		}
 	} else if roleName == "Patient" {
 		_, err = tx.Exec(ctx, "INSERT INTO patients (user_id) VALUES ($1)", u.ID)
+		if err != nil {
+			return err
+		}
+	} else if roleName == "Staff" && hospitalID != nil {
+		_, err = tx.Exec(ctx, "INSERT INTO hospital_staff (user_id, hospital_id) VALUES ($1, $2)", u.ID, hospitalID)
 		if err != nil {
 			return err
 		}
@@ -98,4 +103,10 @@ func (r *pgxRepo) GetByID(ctx context.Context, id string) (*User, error) {
 		return nil, nil
 	}
 	return &u, err
+}
+
+func (r *pgxRepo) UpdatePassword(ctx context.Context, id string, hash string) error {
+	query := `UPDATE users SET password_hash = $1, updated_at = NOW() WHERE id = $2`
+	_, err := r.db.Exec(ctx, query, hash, id)
+	return err
 }
