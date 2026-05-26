@@ -18,8 +18,11 @@ func RegisterRoutes(router *gin.RouterGroup, mongoClient *mongo.Client, rdb *red
 	g := router.Group("/medicines")
 	g.Use(middleware.Auth(ks))
 	{
-		// Search is available to doctors (to add to prescriptions)
+		// Search is available to all authenticated users
 		g.GET("/search", h.Search)
 		g.GET("/", h.Search) // alias for list
+
+		// Only doctors can create new medicines
+		g.POST("/", middleware.BlockRole("TESTER"), middleware.RequireRole("Doctor"), h.Create)
 	}
 }

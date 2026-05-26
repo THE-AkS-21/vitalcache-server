@@ -23,7 +23,7 @@ func RegisterRoutes(router *gin.RouterGroup, mongoClient *mongo.Client, rdb *red
 	g.Use(middleware.Auth(ks))
 	{
 		// Only doctors can create prescriptions (handler also validates doctor_id claim)
-		g.POST("/", middleware.RequireRole("DOCTOR", "DEVELOPER"), idemMiddleware, h.Create)
+		g.POST("/", middleware.BlockRole("TESTER"), middleware.RequireRole("DOCTOR", "DEVELOPER"), idemMiddleware, h.Create)
 		// Any authenticated user can view a prescription (further ownership check in service layer)
 		g.GET("/:id", h.Get)
 		g.GET("/patient/:patientId", h.ListPatientHistory)

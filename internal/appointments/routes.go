@@ -22,7 +22,7 @@ func RegisterRoutes(router *gin.RouterGroup, db *pgxpool.Pool, rdb *redis.Client
 	g.Use(middleware.Auth(ks))
 	{
 		// Both doctors and staff can list/create appointments
-		g.GET("/", h.List)
-		g.POST("/", idemMiddleware, middleware.RequireRole("DOCTOR", "HOSPITAL_STAFF", "DEVELOPER"), h.Create)
+		g.GET("", h.List)
+		g.POST("", idemMiddleware, middleware.BlockRole("TESTER"), middleware.RequireRole("DOCTOR", "HOSPITAL_STAFF", "DEVELOPER"), h.Create)
 	}
 }

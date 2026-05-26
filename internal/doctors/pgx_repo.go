@@ -22,10 +22,10 @@ func New(pool *pgxpool.Pool) *PgxDoctorRepo {
 
 // GetByID fetches a single doctor by primary key.
 // Returns nil, nil if not found.
-func (r *PgxDoctorRepo) GetByID(ctx context.Context, id int64) (*Doctor, error) {
+func (r *PgxDoctorRepo) GetByID(ctx context.Context, id string) (*Doctor, error) {
 	const q = `
-		SELECT d.id, d.user_id, u.name, d.designation, d.specialisation,
-		       d.registration_number, d.hospital_id, d.created_at
+		SELECT d.id, d.user_id, u.first_name || ' ' || u.last_name as name, d.designation, d.specialization,
+		       d.registration_number, d.hospital_id, d.consultation_fee, d.created_at
 		FROM   doctors d
 		JOIN   users   u ON u.id = d.user_id
 		WHERE  d.id = $1
@@ -36,10 +36,10 @@ func (r *PgxDoctorRepo) GetByID(ctx context.Context, id int64) (*Doctor, error) 
 }
 
 // GetByUserID fetches a doctor profile by the linked users.id (used post-login).
-func (r *PgxDoctorRepo) GetByUserID(ctx context.Context, userID int64) (*Doctor, error) {
+func (r *PgxDoctorRepo) GetByUserID(ctx context.Context, userID string) (*Doctor, error) {
 	const q = `
-		SELECT d.id, d.user_id, u.name, d.designation, d.specialisation,
-		       d.registration_number, d.hospital_id, d.created_at
+		SELECT d.id, d.user_id, u.first_name || ' ' || u.last_name as name, d.designation, d.specialization,
+		       d.registration_number, d.hospital_id, d.consultation_fee, d.created_at
 		FROM   doctors d
 		JOIN   users   u ON u.id = d.user_id
 		WHERE  d.user_id = $1
@@ -52,12 +52,12 @@ func (r *PgxDoctorRepo) GetByUserID(ctx context.Context, userID int64) (*Doctor,
 // List returns a paginated list of all doctors ordered by name.
 func (r *PgxDoctorRepo) List(ctx context.Context, limit, offset int) ([]Doctor, int64, error) {
 	const q = `
-		SELECT d.id, d.user_id, u.name, d.designation, d.specialisation,
-		       d.registration_number, d.hospital_id, d.created_at,
+		SELECT d.id, d.user_id, u.first_name || ' ' || u.last_name as name, d.designation, d.specialization,
+		       d.registration_number, d.hospital_id, d.consultation_fee, d.created_at,
 		       COUNT(*) OVER() AS total
 		FROM   doctors d
 		JOIN   users   u ON u.id = d.user_id
-		ORDER  BY u.name
+		ORDER  BY u.first_name
 		LIMIT  $1 OFFSET $2`
 
 	rows, err := r.pool.Query(ctx, q, limit, offset)
@@ -74,7 +74,7 @@ func (r *PgxDoctorRepo) List(ctx context.Context, limit, offset int) ([]Doctor, 
 		var d Doctor
 		if err := rows.Scan(
 			&d.ID, &d.UserID, &d.Name, &d.Designation, &d.Specialisation,
-			&d.RegistrationNumber, &d.HospitalID, &d.CreatedAt, &total,
+			&d.RegistrationNumber, &d.HospitalID, &d.ConsultationFee, &d.CreatedAt, &total,
 		); err != nil {
 			return nil, 0, fmt.Errorf("scan doctor row: %w", err)
 		}
@@ -83,13 +83,19 @@ func (r *PgxDoctorRepo) List(ctx context.Context, limit, offset int) ([]Doctor, 
 	return result, total, rows.Err()
 }
 
+func (r *PgxDoctorRepo) UpdateFee(ctx context.Context, id string, fee float64) error {
+	const q = `UPDATE doctors SET consultation_fee = $1 WHERE id = $2`
+	_, err := r.pool.Exec(ctx, q, fee, id)
+	return err
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 func scanDoctor(row pgx.Row) (*Doctor, error) {
 	var d Doctor
 	err := row.Scan(
 		&d.ID, &d.UserID, &d.Name, &d.Designation, &d.Specialisation,
-		&d.RegistrationNumber, &d.HospitalID, &d.CreatedAt,
+		&d.RegistrationNumber, &d.HospitalID, &d.ConsultationFee, &d.CreatedAt,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, nil

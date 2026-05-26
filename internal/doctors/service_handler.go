@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -30,7 +29,7 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo, log: logger.Named("doctors.service")}
 }
 
-func (s *Service) GetByID(ctx context.Context, id int64) (*Doctor, error) {
+func (s *Service) GetByID(ctx context.Context, id string) (*Doctor, error) {
 	d, err := s.repo.GetByID(ctx, id)
 	if err != nil {
 		return nil, apperr.Internal(fmt.Errorf("doctor.GetByID: %w", err))
@@ -41,7 +40,7 @@ func (s *Service) GetByID(ctx context.Context, id int64) (*Doctor, error) {
 	return d, nil
 }
 
-func (s *Service) GetByUserID(ctx context.Context, userID int64) (*Doctor, error) {
+func (s *Service) GetByUserID(ctx context.Context, userID string) (*Doctor, error) {
 	d, err := s.repo.GetByUserID(ctx, userID)
 	if err != nil {
 		return nil, apperr.Internal(fmt.Errorf("doctor.GetByUserID: %w", err))
@@ -58,6 +57,13 @@ func (s *Service) List(ctx context.Context, limit, offset int) ([]Doctor, int64,
 		return nil, 0, apperr.Internal(err)
 	}
 	return ds, total, nil
+}
+
+func (s *Service) UpdateFee(ctx context.Context, id string, fee float64) error {
+	if err := s.repo.UpdateFee(ctx, id, fee); err != nil {
+		return apperr.Internal(err)
+	}
+	return nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -85,8 +91,8 @@ func (h *Handler) List(c *gin.Context) {
 
 // GET /api/v1/doctors/:id
 func (h *Handler) GetByID(c *gin.Context) {
-	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
-	if err != nil || id < 1 {
+	id := c.Param("id")
+	if id == "" {
 		apperr.Abort(c, apperr.BadRequest("invalid id"))
 		return
 	}
@@ -96,4 +102,29 @@ func (h *Handler) GetByID(c *gin.Context) {
 		return
 	}
 	apperr.WriteOK(c, http.StatusOK, d)
+}
+
+// PUT /api/v1/doctors/:id/fee
+type UpdateFeeRequest struct {
+	Fee float64 `json:"fee" validate:"required,min=0"`
+}
+
+func (h *Handler) UpdateFee(c *gin.Context) {
+	id := c.Param("id")
+	if id == "" {
+		apperr.Abort(c, apperr.BadRequest("invalid id"))
+		return
+	}
+
+	var req UpdateFeeRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		apperr.Abort(c, apperr.BadRequest("invalid JSON"))
+		return
+	}
+
+	if err := h.svc.UpdateFee(c.Request.Context(), id, req.Fee); err != nil {
+		apperr.Abort(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }

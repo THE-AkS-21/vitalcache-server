@@ -20,5 +20,8 @@ func RegisterRoutes(router *gin.RouterGroup, pgPool *pgxpool.Pool, _ *zap.Sugare
 		// Any authenticated user can browse doctors (patients need to find their doctor)
 		group.GET("", h.List)
 		group.GET("/:id", h.GetByID)
+
+		// Only Doctors can update their fee
+		group.PUT("/:id/fee", middleware.BlockRole("TESTER"), middleware.RequireRole("DOCTOR"), h.UpdateFee)
 	}
 }

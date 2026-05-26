@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 	"golang.org/x/crypto/bcrypt"
+	"google.golang.org/api/idtoken"
 
 	apperr "github.com/THE-AkS-21/vitalcache-server/internal/pkg/errors"
 	"github.com/THE-AkS-21/vitalcache-server/internal/pkg/logger"
@@ -21,7 +23,6 @@ import (
 const (
 	refreshKeyPrefix = "refresh:"
 	refreshTTL       = 7 * 24 * time.Hour
-	accessTTL        = 15 * time.Minute
 )
 
 type Service struct {
@@ -46,7 +47,7 @@ func NewService(users UserRepository, profiles ProfileRepository, rdb *redis.Cli
 // Register & Login
 // ─────────────────────────────────────────────────────────────────────────────
 
-func (s *Service) Register(ctx context.Context, req RegisterRequest) error {
+func (s *Service) Register(ctx context.Context, req RegisterRequest, hospitalID *string) error {
 	req.Email = strings.ToLower(strings.TrimSpace(req.Email))
 
 	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
@@ -65,7 +66,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) error {
 	}
 
 	role := strings.ToUpper(req.Role)
-	if role != "PATIENT" && role != "DOCTOR" {
+	if role != "PATIENT" && role != "DOCTOR" && role != "STAFF" {
 		role = "PATIENT" // default fallback
 	}
 
@@ -76,13 +77,19 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) error {
 		if designationName == "" || designationName == "GENERAL_PHYSICIAN" || designationName == "DOCTOR" {
 			designationName = "General Physician" // sensible default
 		}
+	} else if role == "STAFF" {
+		roleName = "Staff"
+		designationName = req.Designation
+		if designationName == "" {
+			designationName = "Staff"
+		}
 	} else {
 		roleName = "Patient"
 		designationName = "Patient"
 	}
 
 	// Create user with the requested role
-	if err := s.users.CreateUserTransaction(ctx, u, roleName, designationName); err != nil {
+	if err := s.users.CreateUserTransaction(ctx, u, roleName, designationName, hospitalID); err != nil {
 		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "already registered") {
 			return apperr.Conflict("email or phone number already registered", err)
 		}
@@ -164,7 +171,7 @@ func (s *Service) AcceptInvite(ctx context.Context, req AcceptInviteRequest) err
 	}
 
 	// 3. Create the user with the role guaranteed by the signed token
-	if err := s.users.CreateUserTransaction(ctx, u, role, designation); err != nil {
+	if err := s.users.CreateUserTransaction(ctx, u, role, designation, nil); err != nil {
 		if strings.Contains(err.Error(), "unique constraint") || strings.Contains(err.Error(), "already registered") {
 			return apperr.Conflict("email is already registered", err)
 		}
@@ -172,6 +179,29 @@ func (s *Service) AcceptInvite(ctx context.Context, req AcceptInviteRequest) err
 	}
 
 	s.log.Info("user accepted invite", zap.String("email", email), zap.String("role", role))
+	return nil
+}
+
+func (s *Service) UpdatePassword(ctx context.Context, userID string, req UpdatePasswordRequest) error {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil || u == nil {
+		return apperr.Unauthorized("user not found")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(req.OldPassword)); err != nil {
+		return apperr.Unauthorized("incorrect old password")
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return apperr.Internal(fmt.Errorf("hash password: %w", err))
+	}
+
+	if err := s.users.UpdatePassword(ctx, userID, string(hash)); err != nil {
+		return apperr.Internal(err)
+	}
+
+	s.log.Info("user updated password", zap.String("user_id", userID))
 	return nil
 }
 
@@ -202,18 +232,112 @@ func (s *Service) Login(ctx context.Context, req LoginRequest) (TokenPair, error
 		PatientID:   profile.PatientID,
 	}
 
-	access, err := s.signAccess(claims)
+	ttl := 30 * time.Minute
+	refreshDur := 7 * 24 * time.Hour
+
+	if strings.EqualFold(profile.Role, "Tester") {
+		ttl = 5 * time.Minute
+		refreshDur = 5 * time.Minute
+	} else if strings.EqualFold(profile.Role, "Doctor") || strings.EqualFold(profile.Role, "Admin") || strings.EqualFold(profile.Designation, "Godfather") {
+		ttl = 24 * time.Hour
+		refreshDur = 24 * time.Hour
+	}
+
+	access, err := s.signAccess(claims, ttl)
 	if err != nil {
 		return TokenPair{}, apperr.Internal(err)
 	}
 
-	refresh, err := s.issueRefresh(ctx, u.ID)
+	refresh, err := s.issueRefresh(ctx, u.ID, refreshDur)
 	if err != nil {
 		return TokenPair{}, apperr.Internal(err)
 	}
 
 	s.log.Info("user logged in", zap.String("user_id", u.ID), zap.String("role", profile.Role))
-	return TokenPair{AccessToken: access, RefreshToken: refresh}, nil
+	return TokenPair{AccessToken: access, RefreshToken: refresh, RefreshTTL: int(refreshDur.Seconds())}, nil
+}
+
+func (s *Service) GoogleLogin(ctx context.Context, req GoogleLoginRequest) (TokenPair, error) {
+	clientID := os.Getenv("GOOGLE_CLIENT_ID")
+	if clientID == "" {
+		clientID = "placeholder-client-id"
+	}
+
+	// For local dev without a real token/client ID, we might allow a bypass if DEV_INSECURE_COOKIES is set,
+	// but the user wants actual validation to happen.
+	payload, err := idtoken.Validate(ctx, req.Token, clientID)
+	if err != nil {
+		s.log.Error("google token validation failed", zap.Error(err))
+		return TokenPair{}, apperr.Unauthorized("invalid google token")
+	}
+
+	emailRaw, ok := payload.Claims["email"].(string)
+	if !ok || emailRaw == "" {
+		return TokenPair{}, apperr.Unauthorized("google token missing email")
+	}
+	email := strings.ToLower(strings.TrimSpace(emailRaw))
+
+	u, err := s.users.GetByEmail(ctx, email)
+	if err != nil {
+		return TokenPair{}, apperr.Internal(err)
+	}
+
+	if u == nil {
+		// Auto-register Patient if not found
+		// Generating a random password since they login via Google
+		u = &User{
+			Email:     email,
+			FirstName: strings.Split(email, "@")[0],
+			LastName:  "",
+		}
+		hash, _ := bcrypt.GenerateFromPassword([]byte(uuid.New().String()), bcrypt.DefaultCost)
+		u.PasswordHash = string(hash)
+
+		if err := s.users.CreateUserTransaction(ctx, u, "Patient", "Patient", nil); err != nil {
+			return TokenPair{}, apperr.Internal(fmt.Errorf("auto-register patient: %v", err))
+		}
+	}
+
+	profile, err := s.profiles.GetProfileAndPermissions(ctx, u.ID)
+	if err != nil {
+		return TokenPair{}, apperr.Internal(err)
+	}
+
+	// Prevent auto-registering uninvited doctors/staff (they would have the Patient role if just auto-registered)
+	// But since we just auto-registered them as Patient, it's fine.
+
+	claims := Claims{
+		UserID:      u.ID,
+		Role:        profile.Role,
+		Designation: profile.Designation,
+		Permissions: profile.Permissions,
+		DoctorID:    profile.DoctorID,
+		PatientID:   profile.PatientID,
+	}
+
+	ttl := 30 * time.Minute
+	refreshDur := 7 * 24 * time.Hour
+
+	if strings.EqualFold(profile.Role, "Tester") {
+		ttl = 5 * time.Minute
+		refreshDur = 5 * time.Minute
+	} else if strings.EqualFold(profile.Role, "Doctor") || strings.EqualFold(profile.Role, "Admin") || strings.EqualFold(profile.Designation, "Godfather") {
+		ttl = 24 * time.Hour
+		refreshDur = 24 * time.Hour
+	}
+
+	access, err := s.signAccess(claims, ttl)
+	if err != nil {
+		return TokenPair{}, apperr.Internal(err)
+	}
+
+	refresh, err := s.issueRefresh(ctx, u.ID, refreshDur)
+	if err != nil {
+		return TokenPair{}, apperr.Internal(err)
+	}
+
+	s.log.Info("user logged in via google", zap.String("user_id", u.ID), zap.String("role", profile.Role))
+	return TokenPair{AccessToken: access, RefreshToken: refresh, RefreshTTL: int(refreshDur.Seconds())}, nil
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -251,17 +375,28 @@ func (s *Service) Refresh(ctx context.Context, rawRefresh string) (TokenPair, er
 		PatientID:   profile.PatientID,
 	}
 
-	access, err := s.signAccess(claims)
+	ttl := 30 * time.Minute
+	refreshDur := 7 * 24 * time.Hour
+
+	if strings.EqualFold(profile.Role, "Tester") {
+		ttl = 5 * time.Minute
+		refreshDur = 5 * time.Minute
+	} else if strings.EqualFold(profile.Role, "Doctor") || strings.EqualFold(profile.Role, "Admin") || strings.EqualFold(profile.Designation, "Godfather") {
+		ttl = 24 * time.Hour
+		refreshDur = 24 * time.Hour
+	}
+
+	access, err := s.signAccess(claims, ttl)
 	if err != nil {
 		return TokenPair{}, apperr.Internal(err)
 	}
 
-	newRefresh, err := s.issueRefresh(ctx, u.ID)
+	newRefresh, err := s.issueRefresh(ctx, u.ID, refreshDur)
 	if err != nil {
 		return TokenPair{}, apperr.Internal(err)
 	}
 
-	return TokenPair{AccessToken: access, RefreshToken: newRefresh}, nil
+	return TokenPair{AccessToken: access, RefreshToken: newRefresh, RefreshTTL: int(refreshDur.Seconds())}, nil
 }
 
 func (s *Service) Logout(ctx context.Context, rawRefresh string) {
@@ -282,7 +417,7 @@ func (s *Service) activeKey() ([]byte, error) {
 	return key, nil
 }
 
-func (s *Service) signAccess(c Claims) (string, error) {
+func (s *Service) signAccess(c Claims, ttl time.Duration) (string, error) {
 	key, err := s.activeKey()
 	if err != nil {
 		return "", err
@@ -293,7 +428,7 @@ func (s *Service) signAccess(c Claims) (string, error) {
 		"user_id":     c.UserID,
 		"role":        c.Role,
 		"designation": c.Designation,
-		"exp":         time.Now().Add(accessTTL).Unix(),
+		"exp":         time.Now().Add(ttl).Unix(),
 		"iat":         time.Now().Unix(),
 	}
 	if len(c.Permissions) > 0 {
@@ -310,12 +445,12 @@ func (s *Service) signAccess(c Claims) (string, error) {
 	return tok.SignedString(key)
 }
 
-func (s *Service) issueRefresh(ctx context.Context, userID string) (string, error) {
+func (s *Service) issueRefresh(ctx context.Context, userID string, ttl time.Duration) (string, error) {
 	raw := uuid.New().String()
 	h := hashToken(raw)
 	key := refreshKeyPrefix + h
 
-	if err := s.rdb.Set(ctx, key, userID, refreshTTL).Err(); err != nil {
+	if err := s.rdb.Set(ctx, key, userID, ttl).Err(); err != nil {
 		return "", fmt.Errorf("store refresh token: %w", err)
 	}
 	return raw, nil

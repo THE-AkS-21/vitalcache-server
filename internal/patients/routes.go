@@ -17,10 +17,10 @@ func RegisterRoutes(router *gin.RouterGroup, db *pgxpool.Pool, ks pkgjwt.JWTKeyS
 	g.Use(middleware.Auth(ks))
 	g.Use(middleware.RequireRole("DOCTOR", "HOSPITAL_STAFF", "DEVELOPER"))
 	{
-		g.GET("/", h.List)
+		g.GET("", h.List)
 		g.GET("/search", h.Search)
-		g.POST("/", h.Create)
+		g.POST("", middleware.BlockRole("TESTER"), h.Create)
 		g.GET("/:id", h.GetByID)
-		g.PATCH("/:id", h.Update)
+		g.PATCH("/:id", middleware.BlockRole("TESTER"), h.Update)
 	}
 }

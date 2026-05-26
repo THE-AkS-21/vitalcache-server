@@ -39,14 +39,17 @@ func RegisterRoutes(router *gin.RouterGroup, db *pgxpool.Pool, rdb *redis.Client
 		authGroup.POST("/refresh", h.Refresh)
 		authGroup.POST("/logout", h.Logout)
 		authGroup.POST("/invites/accept", h.AcceptInvite) // public invite acceptance
+		authGroup.POST("/google", h.GoogleLogin)
 	}
 
 	// ── Protected auth routes ────────────────────────────────────────────────
 	authProtectedGroup := router.Group("/auth")
 	authProtectedGroup.Use(middleware.Auth(ks))
 	{
-		// Only Admins and Doctors can generate staff invites
-		authProtectedGroup.POST("/invites", middleware.RequireRole("ADMIN", "DOCTOR"), h.GenerateInvite)
+		// Only Admins, Doctors, Developers can generate staff invites (GodFather designation bypassed via auth middleware)
+		authProtectedGroup.POST("/invites", middleware.BlockRole("TESTER"), middleware.RequireRole("ADMIN", "DOCTOR", "DEVELOPER"), h.GenerateInvite)
+		// Users can update their own password
+		authProtectedGroup.PUT("/password", h.UpdatePassword)
 	}
 
 	// ── Protected profile route ───────────────────────────────────────────────
